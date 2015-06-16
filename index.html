@@ -1,0 +1,49 @@
+<!doctype html>
+
+<html ng-app="kenkenApp">
+
+<head>
+    <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.3.16/angular.min.js"></script>
+    <script src="kenken-service.js"></script>
+    <script src="kenken-controller.js"></script>
+    <script src="operators-filter.js"></script>
+    <script src="cell-walls-directive.js"></script>
+    <script src="sync-focus-directive.js"></script>
+    <link rel="stylesheet" href="kenken.css">
+</head>
+
+<body ng-controller="KenkenController" ng-keydown="keydown($event)" ng-keyup="keyup($event)">
+    <div class="clock">
+        {{ time | date:'m:ss' }} <span ng-show="solved">SOLVED!</span>
+    </div>
+    <table id="board" tabindex="0" ng-blur="cursorHidden=true" ng-focus="cursorHidden=false">
+        <tr ng-repeat="row in board">
+            <td ng-repeat="cell in row"
+                cell-walls
+                ng-class="{cursor: cursorAt($parent.$index, $index), good: solved || checksRight(cell), bad: checksWrong(cell)}"
+                ng-click="setCursor($parent.$index, $index)">
+                {{ cell.guess }}
+                <div class="label" ng-show="cell.cage.cells[0] == cell">
+                    {{ cell.cage.total }}<span class="operator" ng-bind-html="cell.cage.op | operators"></span>
+                </div>
+            </td>
+        </tr>
+    </table>
+    <div class="controls">
+    <label>size:</label>
+    <select class="size-select" ng-model="board_size" ng-options="n for n in ['2','3','4','5','6','7','8']"
+            ng-change="reset_board()">
+    </select>
+
+    <label>operations:</label>
+        <!-- can't use ng-options here because the option labels contain html entities -->
+    <select class="operator" ng-model="ops" ng-change="reset_board()">
+        <option value="+-">&plus; &minus;</option>
+        <option value="+x">&plus; &times;</option>
+        <option value="+-x">&plus; &minus; &times;</option>
+        <option value="+-x/">&plus; &minus; &times; &divide;</option>
+    </select>
+    </div>
+</body>
+
+<html>
