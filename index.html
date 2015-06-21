@@ -22,8 +22,8 @@
                 ng-class="{cursor: cursorAt($parent.$index, $index), good: solved || checksRight(cell), bad: checksWrong(cell)}"
                 ng-click="setCursor($parent.$index, $index)">
                 {{ cell.guess }}
-                <div class="label" ng-show="cell.cage.cells[0] == cell">
-                    {{ cell.cage.total }}<span class="operator" ng-bind-html="cell.cage.op | operators"></span>
+                <div class="label" ng-show="cell.isFirstInCage">
+                    {{ cages[cell.cage].total }}<span class="operator" ng-bind-html="cages[cell.cage].op | operators"></span>
                 </div>
             </td>
         </tr>

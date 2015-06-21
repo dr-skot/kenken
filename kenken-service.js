@@ -67,57 +67,77 @@ angular.module('kenkenApp', [])
       var cages = [];
       for (i = 0; i < n; i++) {
         for (j = 0; j < n; j++) {
-          if (!a[i][j].cage) {
-            cages.push(make_cage(++id, a, i, j, ops));
+          a[i][j].i = i; a[i][j].j = j;
+          if (!a[i][j].hasOwnProperty('cage')) {
+            cages.push(make_cage(id++, a, i, j, ops));
           }
         }
       }
       return cages;
     }
 
+    function cell(a, ij) {
+      return a[ij[0]][ij[1]];
+    }
+
     // makes a cage that contains a[i][j], using a randomly chosen operator from ops
+    // cage is of this form: { id: 0, op: '+', total: 14, cells: [[0,0], [0,1], [1,1]] }
     function make_cage(id, a, i, j, ops) {
       var n = a.length;
       var r = Math.random();
       var size = r < 0.05 ? 1 : r < 0.6 ? 2 : r < 0.9 ? 3 : 4;
-      var cage = {id: id, cells: [a[i][j]]};
-      a[i][j].cage = cage;
-      var ds, d;
+      var cage = {id: id, cells: [[i, j]]};
+      var neighbors, neighbor;
+      var op, total;
+
+      a[i][j].cage = id;
+      a[i][j].isFirstInCage = true;
+
+      // determine which cells are in the cage
       while (cage.cells.length < size) {
-        ds = [];
-        [[i-1,j],[i,j-1],[i+1,j],[i,j+1]].forEach(function(d) {
-          if (d[0] >= 0 && d[0] < n && d[1] >= 0 && d[1] < n && !a[d[0]][d[1]].cage) {
-            ds.push(d);
+        // find all uncaged neighbors
+        neighbors = [];
+        [[i-1, j], [i, j-1], [i+1, j], [i, j+1]].forEach(function(neighbor) {
+          var ii = neighbor[0], jj = neighbor[1];
+          if (ii >= 0 && ii < n && jj >= 0 && jj < n && !a[ii][jj].hasOwnProperty('cage')) {
+            neighbors.push(neighbor);
           }
         });
-        if (ds.length == 0) {
-          size = cage.cells.length; // break out of loop
-        } else {
-          d = rnd_elem(ds);
-          i = d[0];
-          j = d[1];
-          cage.cells.push(a[i][j]);
-          a[i][j].cage = cage;
+
+        // if no neighbors, this cage is done
+        if (neighbors.length == 0) {
+          size = cage.cells.length; // (ends while loop)
+        }
+
+        // otherwise choose a neighbor at random, add it to the cage, and continue
+        else {
+          neighbor = rnd_elem(neighbors);
+          i = neighbor[0];
+          j = neighbor[1];
+          cage.cells.push([i, j]);
+          a[i][j].cage = id;
         }
       }
-      var op, total;
+
+      // now choose an operator and calculate the total
 
       // one cell: no operator
       if (size == 1) {
-        total = cage.cells[0].ans;
+        total = cell(a, cage.cells[0]).ans;
         op = '';
       }
 
-      // two cells: sub and div are possible, div only if cells divide evenly
+      // two cells: sub and div are possible, but div only if cells divide evenly
       else if (size == 2) {
-        var a = cage.cells[0].ans, b = cage.cells[1].ans;
+        var x = cell(a, cage.cells[0]).ans, y = cell(a, cage.cells[1]).ans;
         if (~ops.indexOf('/')) {
           // check if div is possible
-          var div = Math.max(a/b, b/a);
-          ops = (div == Math.floor(div)) ? ops + '/' : ops.replace('/', ''); // double the odds of div if it works
+          var div = Math.max(x/y, y/x);
+          // if not, remove '/' from ops; otherwise, add an _extra_ '/' to double div's chances
+          ops = (div == Math.floor(div)) ? ops + '/' : ops.replace('/', '');
         }
         op = rnd_char(ops);
-        total = op == '/' ? div : op == '+' ? a + b : op == 'x' ? a * b : op == '-' ? Math.abs(a - b) : 'ERR!'
+        total = op == '/' ? div : op == '+' ? x + y : op == 'x' ? x * y : op == '-' ? Math.abs(x - y) : 'ERR!'
       }
 
       // more than two cells: div and sub not allowed
@@ -126,7 +146,8 @@ angular.module('kenkenApp', [])
         op = rnd_char(ops);
         total = op == '+' ? 0 : 1;
         cage.cells.forEach(function(c) {
-          total = op == '+' ? total + c.ans : op == 'x' ? total * c.ans : 'ERR!';
+          var ans = cell(a, c).ans;
+          total = op == '+' ? total + ans : op == 'x' ? total * ans : 'ERR!';
         });
       }
       cage.op = op;
@@ -135,9 +156,9 @@ angular.module('kenkenApp', [])
     }
 
     this.get_board = function(n, ops) {
-      var b = latin_square(n);
-      make_cages(b, ops);
-      return b;
+      var cells = latin_square(n);
+      var cages = make_cages(cells, ops);
+      return { cells: cells, cages: cages };
     };
 
     this.is_solved = function(b) {

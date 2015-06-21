@@ -14,14 +14,28 @@ angular.module('kenkenApp')
     */
 
     function loadValues() {
-      $scope.board_size = $window.localStorage.getItem('kenken.boardSize') || 4;
-      $scope.ops = $window.localStorage.getItem('kenken.ops') || '+-x/';
+      var kenken = $window.localStorage.getItem('kenken.thing');
+      console.log('loadValues %O', kenken);
+      kenken = JSON.parse(kenken);
+      if (!kenken) kenken = {};
+      $scope.board_size = kenken.boardSize || '4';
+      $scope.ops = kenken.ops || '+-x/';
+      $scope.board = kenken.board;
+      $scope.cages = kenken.cages;
+      $scope.cursor = kenken.cursor || [0, 0];
+      $scope.solved = kenken.solved || false;
+      if ($scope.solved) $scope.reset_board()
+      console.log('loadValues %O', kenken);
+      $interval.cancel(timer);
+      $scope.time = 0;
+      timer = $interval(function() { $scope.time += 1000; }, 1000);
+
     }
 
     function storeValues() {
-      $window.localStorage.setItem('kenken.boardSize', $scope.board_size);
-      $window.localStorage.setItem('kenken.ops', $scope.ops);
-      console.log('saved $scope.ops %s', $scope.ops);
+      var kenken = { boardSize: $scope.board_size, ops: $scope.ops, board: $scope.board, cages: $scope.cages, cursor: $scope.cursor, solved: $scope.solved };
+      $window.localStorage.setItem('kenken.thing', JSON.stringify(kenken));
+      console.log('storeValues %O', JSON.stringify(kenken));
     }
 
     function guess(i, j, x) {
@@ -31,6 +45,7 @@ angular.module('kenkenApp')
         undos.push({i:i, j:j, guess:b[i][j].guess});
       }
       b[i][j].guess = x;
+      storeValues();
     }
 
     function undo() {
@@ -44,9 +59,14 @@ angular.module('kenkenApp')
 
     $scope.reset_board = function() {
       console.log('reset board');
-      $scope.board = KenkenService.get_board($scope.board_size, $scope.ops);
+      var board = KenkenService.get_board($scope.board_size, $scope.ops);
+      $scope.board = board.cells;
+      $scope.cages = board.cages;
       $scope.cursor = [0,0];
       $scope.solved = false;
+
+      console.log('board %O', $scope.board);
+      console.log('cages %O', $scope.cages);
 
       storeValues();
 
@@ -62,6 +82,7 @@ angular.module('kenkenApp')
 
     $scope.setCursor = function(i, j) {
       $scope.cursor = [i, j];
+      storeValues();
     }
 
     $scope.checksRight = function(cell) {
@@ -74,12 +95,12 @@ angular.module('kenkenApp')
 
     $scope.cell_walls = function(i, j) {
       var b = $scope.board;
-      var id = b[i][j].cage.id;
+      var cage = b[i][j].cage;
       var walls = [];
-      if (i == 0 || b[i-1][j].cage.id != id) walls.push('top');
-      if (j == 0 || b[i][j-1].cage.id != id) walls.push('left');
-      if (i+1 == b.length || b[i+1][j].cage.id != id) walls.push('bottom');
-      if (j+1 == b.length || b[i][j+1].cage.id != id) walls.push('right');
+      if (i == 0 || b[i-1][j].cage != cage) walls.push('top');
+      if (j == 0 || b[i][j-1].cage != cage) walls.push('left');
+      if (i+1 == b.length || b[i+1][j].cage != cage) walls.push('bottom');
+      if (j+1 == b.length || b[i][j+1].cage != cage) walls.push('right');
       return walls;
     };
 
@@ -98,7 +119,7 @@ angular.module('kenkenApp')
       else if (k === 38) i = (i + n - 1) % n;
       else if (k === 40) i = (i + 1) % n;
 
-      $scope.cursor = [i,j];
+      $scope.setCursor(i, j);
 
       // numbers
       if (k - 48 >= 1 && k - 48 <= n) {
@@ -106,6 +127,7 @@ angular.module('kenkenApp')
         if (KenkenService.is_solved(b)) {
           $interval.cancel(timer);
           $scope.solved = true;
+          storeValues();
         }
       }
 
@@ -137,6 +159,6 @@ angular.module('kenkenApp')
     $document.ready(function() { $document[0].getElementById('board').focus(); });
 
     loadValues();
-    $scope.reset_board();
+    if (!$scope.board) $scope.reset_board();
 
   });
