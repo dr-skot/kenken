@@ -4,7 +4,7 @@ angular.module('kenkenApp').directive('cellWalls', function () {
     link: function (scope, element, attrs) {
       attrs.$observe('cellWalls', function() {
         var i = scope.$parent.$index; j = scope.$index;
-        var walls = scope.cell_walls(i, j);
+        var walls = scope.cellWalls(i, j);
         walls.forEach(function(side) {
           element.addClass('wall-' + side);
         });

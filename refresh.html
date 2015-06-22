@@ -1,0 +1,21 @@
+<html>
+<head>
+    <script>
+        function checkRefresh() {
+            r = document.refreshForm.visited;
+            if(r.value == "") {
+                r.value = 1;
+                console.log("first load");
+            } else {
+                r.value += 1;
+                console.log("reload count " + r.value);
+            }
+        }
+    </script>
+</head>
+<body onload="checkRefresh()">
+<form name="refreshForm">
+    <input name="visited" value="">
+</form>
+</body>
+</html>

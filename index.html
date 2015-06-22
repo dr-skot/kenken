@@ -30,19 +30,20 @@
     </table>
     <div class="controls">
     <label>size:</label>
-    <select class="size-select" ng-model="board_size" ng-options="n for n in ['2','3','4','5','6','7','8']"
-            ng-change="reset_board()">
+    <select class="size-select" ng-model="boardSize" ng-options="n for n in ['3','4','5','6','7','8']"
+            ng-change="resetBoard()">
     </select>
 
     <label>operations:</label>
         <!-- can't use ng-options here because the option labels contain html entities -->
-    <select class="operator" ng-model="ops" ng-change="reset_board()">
+    <select class="operator" ng-model="ops" ng-change="resetBoard()">
         <option value="+-">&plus; &minus;</option>
         <option value="+x">&plus; &times;</option>
         <option value="+-x">&plus; &minus; &times;</option>
         <option value="+-x/">&plus; &minus; &times; &divide;</option>
     </select>
     </div>
+
 </body>
 
 <html>
