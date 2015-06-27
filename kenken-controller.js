@@ -18,7 +18,7 @@ angular.module('kenkenApp')
         $scope.time = kenken.time || 0;
         $scope.solved = KenkenService.isSolved($scope.board);
         undos = kenken.undos || [];
-        startTimer();
+        if (!$scope.solved) startTimer();
       } else {
         $scope.newBoard();
       }
