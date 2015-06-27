@@ -7,13 +7,14 @@
     <script src="kenken-service.js"></script>
     <script src="kenken-controller.js"></script>
     <script src="operators-filter.js"></script>
+    <script src="timer-filter.js"></script>
     <script src="cell-walls-directive.js"></script>
     <link rel="stylesheet" href="kenken.css">
 </head>
 
 <body ng-controller="KenkenController" ng-keydown="keydown($event)" ng-keyup="keyup($event)">
     <div class="clock">
-        {{ time | date:'m:ss' }} <span ng-show="solved">SOLVED!</span>
+        {{ time | timer }} <span ng-show="solved">SOLVED!</span>
     </div>
     <table id="board" tabindex="0" ng-blur="cursorHidden=true" ng-focus="cursorHidden=false">
         <tr ng-repeat="row in board">
@@ -43,7 +44,10 @@
         <option value="+-x/">&plus; &minus; &times; &divide;</option>
     </select>
     </div>
-
+    <p>return: check puzzle</p>
+    <p>?: reveal square</p>
+    <p>r: reset</p>
+    <p>n: new puzzle</p>
 </body>
 
 <html>

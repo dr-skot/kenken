@@ -15,25 +15,28 @@ angular.module('kenkenApp')
         $scope.board = kenken.board;
         $scope.cages = kenken.cages;
         $scope.cursor = kenken.cursor || [0, 0];
+        $scope.time = kenken.time || 0;
         $scope.solved = KenkenService.isSolved($scope.board);
         undos = kenken.undos || [];
-        resetTimer();
+        startTimer();
       } else {
-        $scope.resetBoard();
+        $scope.newBoard();
       }
     }
 
     function storeValues() {
       var s = $scope;
-      var kenken = { boardSize: s.boardSize, ops: s.ops, board: s.board, cages: s.cages, cursor: s.cursor };
+      var kenken = { boardSize: s.boardSize, ops: s.ops, board: s.board, cages: s.cages, cursor: s.cursor, time: s.time };
       $window.localStorage.setItem('kenken', JSON.stringify(kenken));
       //console.log('storeValues %O', JSON.stringify(kenken));
     }
 
-    function resetTimer() {
+    function startTimer() {
       $interval.cancel(timer);
-      $scope.time = 0;
-      timer = $interval(function() { $scope.time += 1000; }, 1000);
+      timer = $interval(function() {
+        $scope.time += 1;
+        storeValues();
+      }, 1000);
     }
 
     function guess(i, j, x) {
@@ -63,17 +66,30 @@ angular.module('kenkenApp')
       }
     }
 
-    $scope.resetBoard = function() {
+    function resetBoard() {
+      $scope.board.forEach(function(row) {
+        row.forEach(function(cell) {
+            cell.guess = '';
+        });
+      })
+      $scope.time = 0;
+      $scope.solved = false;
+      undos = [];
+      storeValues();
+    }
+
+    $scope.newBoard = function() {
       console.log('reset board');
       var board = KenkenService.getBoard($scope.boardSize, $scope.ops);
       $scope.board = board.cells;
       $scope.cages = board.cages;
       $scope.cursor = [0,0];
+      $scope.time = 0;
       $scope.solved = false;
       undos = [];
 
       storeValues();
-      resetTimer();
+      startTimer();
     };
 
     $scope.cursorAt = function(i, j) {
@@ -107,7 +123,10 @@ angular.module('kenkenApp')
       var k = $event.which;
 
       // n: new board
-      if (k === 78) $scope.resetBoard();
+      if (k === 78) $scope.newBoard();
+
+      // r: new board
+      if (k === 82) resetBoard();
 
       if ($scope.solved) return;
 
@@ -145,7 +164,20 @@ angular.module('kenkenApp')
 
     $document.ready(function() { $document[0].getElementById('board').focus(); });
 
+    // TODO: move to filter
+    $scope.timerSeconds = function() {
+      var t = $scope.time;
+      var hours   = Math.floor(t / 3600);
+      var minutes = Math.floor((t - (hours * 3600)) / 60);
+      var seconds = t - (hours * 3600) - (minutes * 60);
+
+      if (hours   < 10) {hours   = "0"+hours;}
+      if (minutes < 10 && hours > 0) {minutes = "0"+minutes;}
+      if (seconds < 10) {seconds = "0"+seconds;}
+      var time    = hours+':'+minutes+':'+seconds;
+      return time;
+    };
+
     loadValues();
-    resetTimer();
 
   });
