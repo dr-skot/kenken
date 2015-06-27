@@ -148,7 +148,7 @@ angular.module('kenkenApp')
       else if (k === 13) $scope.checking = true;
 
       // ?: peek
-      else if (k === 191 && $event.shiftKey) peek(b, i, j);
+      else if (k === 191 && $event.shiftKey) peek(i, j);
 
       // esc: undo
       else if (k === 27) undo();
