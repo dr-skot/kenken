@@ -55,6 +55,7 @@ angular.module('kenkenApp')
     
     var rules = {
         "addition": function(puzzle) {
+            /* Check legal addition possibilities */
             var hasChanged = false;
             angular.forEach(puzzle.cages, function(cage) {
                 if (cage.op == "+") {
@@ -63,6 +64,7 @@ angular.module('kenkenApp')
                     var openCells = [];
                     
                     angular.forEach(cage.cells, function(coords) {
+                        /* Calculate remainder of each cell */
                         var cell = getCell(puzzle, coords);
                         if (cell.solution) {
                             remainder -= cell.solution;
@@ -110,6 +112,7 @@ angular.module('kenkenApp')
         },
         
         "division": function(puzzle) {
+            /* Check legal division possibilities */
             var hasChanged = false;
             angular.forEach(puzzle.cages, function(cage) {
                 if (cage.op == "/") {
@@ -144,6 +147,7 @@ angular.module('kenkenApp')
         },
         
         "exclusion": function(puzzle) {
+            /* Exclude known values from reappearing in same column or row */
             var hasChanged = false;
             
             var rowToSolved = {};
@@ -174,6 +178,7 @@ angular.module('kenkenApp')
         },
         
         "multiplication": function(puzzle) {
+            /* Check legal multiplication possibilities */
             var hasChanged = false;
             angular.forEach(puzzle.cages, function(cage) {
                 if (cage.op == "x") {
@@ -229,6 +234,7 @@ angular.module('kenkenApp')
         },
         
         "pidgeonhole": function(puzzle) {
+            /* If possibility occurs only once in a row or column, it must appear there */
             var hasChanged = false;
             
             var puzzleSize = puzzle.board.length;
@@ -287,6 +293,7 @@ angular.module('kenkenApp')
         },
 
         "singletons": function(puzzle) {
+            /* If cage has only one cell, the cage total is the only possibility */
             var hasChanged = false;
             angular.forEach(puzzle.cages, function(cage) {
                 if (cage.cells.length == 1 && !getCell(puzzle, cage.cells[0]).solution) {
@@ -303,6 +310,7 @@ angular.module('kenkenApp')
         },
         
         "solved": function(puzzle) {
+            /* If cell has only one remaining posibility, mark that as solution */
             var hasChanged = false;
             forEachCell(puzzle, function(cell) {
                 var possible = getValues(cell.possible)
@@ -318,6 +326,7 @@ angular.module('kenkenApp')
         },
         
         "subtraction": function(puzzle) {
+            /* Check legal subtraction possibilities */
             var hasChanged = false;
             angular.forEach(puzzle.cages, function(cage) {
                 if (cage.op == "-") {
@@ -350,6 +359,9 @@ angular.module('kenkenApp')
         },
         
         "three": function(puzzle) {
+            /** If the possibilities of three cells in the same row or column all equal the same 3
+              * numbers, those three numbers must occupy those cells, and therefore aren't possible
+              * in any other cells in the same row/column. */
             var puzzleSize = puzzle.board.length;
             if (puzzleSize <= 3) return false;
 
@@ -418,6 +430,9 @@ angular.module('kenkenApp')
         },
         
         "twopair": function(puzzle) {
+            /** If the possibilities of two cells in the same row or column all equal the same 2
+              * numbers, those two numbers must occupy those cells, and therefore aren't possible
+              * in any other cells in the same row/column. */
             var hasChanged = false;
             
             var puzzleSize = puzzle.board.length;
