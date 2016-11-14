@@ -3,8 +3,8 @@
 <html ng-app="kenkenApp">
 
 <head>
-    <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.3.16/angular.min.js"></script>
-    <script src="kenken-services.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.3.16/angular.min.js"></script>    <script src="kenken-services.js"></script>
+    <script src="kenken-solver.js"></script>
     <script src="kenken-controller.js"></script>
     <script src="kenken-directives.js"></script>
     <script src="kenken-filters.js"></script>
@@ -42,9 +42,16 @@
         <option value="+-x">&plus; &minus; &times;</option>
         <option value="+-x/">&plus; &minus; &times; &divide;</option>
     </select>
+    
+    
+    <!-- <div>
+        <span ng-click="solveBoard()">Solve</span>
+    </div> -->
+    
     </div>
     <p>return: check puzzle</p>
     <p>?: reveal square</p>
+    <p>s: solve</p>
     <p>r: reset</p>
     <p>n: new puzzle</p>
 </body>

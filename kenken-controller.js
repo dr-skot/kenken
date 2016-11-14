@@ -1,5 +1,5 @@
 angular.module('kenkenApp')
-  .controller('KenkenController', function($scope, $interval, $window, $document, KenkenService) {
+  .controller('KenkenController', function($scope, $interval, $window, $document, KenkenService, KenkenSolver) {
 
     var timer;
     var undos;
@@ -91,6 +91,10 @@ angular.module('kenkenApp')
       storeValues();
       startTimer();
     };
+    
+    $scope.solveBoard = function() {
+        KenkenSolver.solve($scope);
+    }
 
     $scope.cursorAt = function(i, j) {
       return !$scope.solved && !$scope.cursorHidden && $scope.cursor[0] === i && $scope.cursor[1] === j;
@@ -125,8 +129,11 @@ angular.module('kenkenApp')
       // n: new board
       if (k === 78) $scope.newBoard();
 
-      // r: new board
+      // r: reset board
       if (k === 82) resetBoard();
+      
+      // s: attempt to solve
+      if (k === 83) $scope.solveBoard();
 
       if ($scope.solved) return;
 
