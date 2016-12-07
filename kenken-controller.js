@@ -42,7 +42,7 @@ angular.module('kenkenApp')
     function guess(i, j, x) {
       var b = $scope.board;
       if (x !== b[i][j].guess) {
-        undos.push({ i: i, j: j, guess: (b[i][j].guess || '') });
+        undos.push({ action:'guess', i: i, j: j, guess: (b[i][j].guess || '') });
       }
       b[i][j].guess = x;
       storeValues();
@@ -60,13 +60,22 @@ angular.module('kenkenApp')
 
     function undo() {
       var u = undos.pop();
+      console.log('undo! %O', u);
       if (u) {
-        $scope.board[u.i][u.j].guess = u.guess;
-        $scope.cursor = [u.i, u.j];
+        if (u.action === 'guess') {
+          $scope.board[u.i][u.j].guess = u.guess;
+          $scope.cursor = [u.i, u.j];
+        } else if (u.action === 'reset') {
+          $scope.board = u.board;
+          $scope.time = u.time;
+          $scope.solved = KenkenService.isSolved($scope.board);
+          if (!$scope.solved) startTimer();
+        }
       }
     }
 
     function resetBoard() {
+      undos.push({ action:'reset', time: $scope.time, board: angular.copy($scope.board) });
       $scope.board.forEach(function(row) {
         row.forEach(function(cell) {
             cell.guess = '';
@@ -74,8 +83,8 @@ angular.module('kenkenApp')
       })
       $scope.time = 0;
       $scope.solved = false;
-      undos = [];
       storeValues();
+      console.log('reset! undos %O', undos);
     }
 
     $scope.newBoard = function() {
