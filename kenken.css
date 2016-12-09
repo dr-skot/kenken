@@ -21,6 +21,10 @@ td {
 .label .operator {
     font-size: 18px;
 }
+.possible {
+    font-size: 10px;
+    color: gray;
+}
 .cursor {
     background-color: yellow;
 }

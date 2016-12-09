@@ -1,6 +1,92 @@
 angular.module('kenkenApp')
   .service('KenkenSolver', function() {
 
+    function getColumns(board) {
+      var columns = [];
+      for (var j = 0; j < board[0].length; j++) {
+        var cells = [];
+        for (var i = 0; i < board.length; i++) {
+          cells.push(board[i][j]);
+        }
+        columns.push(cells);
+      }
+      return columns;
+    }
+
+    function prependToEach(elem, arrays) {
+      var result = [];
+      arrays.forEach(function(array) {
+        result.push([elem].concat(array));
+      });
+      return result;
+    }
+
+    function cellsInCage(puzzle, cage) {
+      var cells = [];
+      cage.cells.forEach(function(c) { cells.push(puzzle.board[c[0]][c[1]]); });
+      return cells;
+    }
+
+    function doOperation(op, a, b) {
+      return (
+        op == '/' ? Math.max(a/b, b/a) :
+          op == '-' ? Math.abs(a - b) :
+            op == '+' ? a + b :
+              op == 'x' ? a * b :
+                null);
+    }
+
+    function possibleSolutions(total, op, cells) {
+      // if (cells.length < 2) ERR!
+      // if (op != '/' or 'x' or '+' or '-') ERR!
+      var result = [];
+      var aa = getValues(cells[0].possible);
+      if (cells.length == 2) {
+        var bb = getValues(cells[1].possible);
+        var inLine = aa.i == bb.i || aa.j == bb.j;
+        aa.forEach(function(a) {
+          bb.forEach(function(b) {
+            var collision = inLine && a == b;
+            //if (collision) console.log("collision!", a, b);
+            if (!collision && doOperation(op, a, b) == total) result.push([a, b]);
+            //if (!collision) console.log(op, a, b, total, total == doOperation(op, a, b));
+          });
+        });
+      } else {
+        // if (op == '/' || op == '-') ERR
+        aa.forEach(function(a) {
+          var subtotal = op == '+' ? total - a : total / a;
+          if (subtotal == Math.floor(subtotal)) { // skip if division left a remainder
+            var restOfCells = angular.copy(cells.slice(1));
+            restOfCells.forEach(function(cell) {
+              if (cells[0].i == cell.i || cells[0].j == cell.j) delete cell.possible[a];
+            });
+            //console.log("recurse!", a, op, subtotal, restOfCells);
+            var subsolutions = possibleSolutions(subtotal, op, restOfCells);
+            //console.log("subsolutions", subsolutions);
+            //console.log("prepend", a, prependToEach(a, subsolutions));
+            result = result.concat(prependToEach(a, subsolutions));
+            //console.log("after recursion", result);
+          }
+        });
+      }
+      //console.log("returning result", result);
+      return result;
+    }
+
+    function possibleNumberings(cells) {
+      var result = [];
+      var aa = getValues(cells[0].possible);
+      if (cells.length == 1) return aa;
+      else aa.forEach(function(a) {
+        var restOfCells = angular.copy(cells.slice(1));
+        restOfCells.forEach(function(cell) { delete cell.possible[a]; });
+        var subnumberings = possibleNumberings(restOfCells);
+        result = result.concat(prependToEach(a, subnumberings));
+      });
+      return result;
+    }
+
     function deleteIfPresent(object, val) {
         if (undefined == object[val]) return false;
         delete object[val];
@@ -17,13 +103,13 @@ angular.module('kenkenApp')
     function getUniques(array) {
         var uniques = {};
         for (var i=0; i<array.length; ++i) {
-            uniques[i] = i;
+            uniques[array[i]] = array[i];
         }
         return getValues(uniques);
     }
     function getValues(object) {
         var values = [];
-        for (key in object) {
+        for (var key in object) {
             values.push(object[key]);
         }
         return values;
@@ -54,17 +140,100 @@ angular.module('kenkenApp')
     }
     
     var rules = {
+
+      "singletons": function(puzzle) {
+        /* If cage has only one cell, the cage total is the only possibility */
+        var hasChanged = false;
+        angular.forEach(puzzle.cages, function(cage) {
+          if (cage.cells.length == 1 && !getCell(puzzle, cage.cells[0]).solution) {
+            var total = cage.total;
+            var cell = getCell(puzzle, cage.cells[0])
+            cell.possible = {};
+            cell.possible[total] = total;
+
+            hasChanged = true;
+            // console.log("Cell "+cell.i+","+cell.j+" is singleton "+total);
+          }
+        });
+        return hasChanged;
+      },
+
+        "cage math": function(puzzle) {
+          /* Eliminate values that aren't part of valid solutions to the cage math */
+          var hasChanged = false;
+          puzzle.cages.forEach(function(cage) {
+            if (cage.cells.length > 1) {
+              var solutions = possibleSolutions(cage.total, cage.op, cellsInCage(puzzle, cage));
+              console.log("cage %d%s: %o", cage.total, cage.op, solutions);
+              cellsInCage(puzzle, cage).forEach(function(cell, index) {
+                var possible = {};
+                solutions.forEach(function(solution) {
+                  possible[solution[index]] = solution[index];
+                });
+                hasChanged = hasChanged || getValues(possible).length != getValues(cell.possible).length;
+                cell.possible = possible;
+              });
+            }
+          });
+          return hasChanged;
+        },
+        "rows": function(puzzle) {
+          var hasChanged = false;
+          puzzle.board.forEach(function(row, index) {
+            var numberings = possibleNumberings(row);
+            console.log("row", index, "numberings", numberings);
+            row.forEach(function(cell, index) {
+              var possible = {};
+              numberings.forEach(function(numbering) {
+                possible[numbering[index]] = numbering[index];
+              });
+              hasChanged = hasChanged || getValues(possible).length != getValues(cell.possible).length;
+              cell.possible = possible;
+            });
+          });
+          return hasChanged;
+        },
+        "columns": function(puzzle) {
+          var hasChanged = false;
+          for (var j = 0; j < puzzle.board[0].length; j++) {
+            var col = [];
+            for (var i = 0; i < puzzle.board.length; i++) {
+              col.push(puzzle.board[i][j]);
+            }
+            var numberings = possibleNumberings(col);
+            console.log("col", j, "numberings", numberings);
+            col.forEach(function(cell, index) {
+              var possible = {};
+              numberings.forEach(function(numbering) {
+                possible[numbering[index]] = numbering[index];
+              });
+              hasChanged = hasChanged || getValues(possible).length != getValues(cell.possible).length;
+              cell.possible = possible;
+            });
+          }
+          return hasChanged;
+        },
+        "must have in cage": function(puzzle) {
+          var hasChanged = false;
+          // for each row/column
+          // for each number
+          // what cells is it possible in, in this row/column?
+          // are all those cells in one cage?
+          // if so, does cage know it must contain that number in this row/column?
+          // if not, tell it, and hasChanged = true
+          return hasChanged;
+        }
+        /*
         "addition": function(puzzle) {
-            /* Check legal addition possibilities */
+            // Check legal addition possibilities
             var hasChanged = false;
             angular.forEach(puzzle.cages, function(cage) {
                 if (cage.op == "+") {
-                    var total = cage.total;
-                    var remainder = total;
+                    var remainder = cage.total;
                     var openCells = [];
                     
                     angular.forEach(cage.cells, function(coords) {
-                        /* Calculate remainder of each cell */
+                        // Calculate remainder of each cell
                         var cell = getCell(puzzle, coords);
                         if (cell.solution) {
                             remainder -= cell.solution;
@@ -112,7 +281,7 @@ angular.module('kenkenApp')
         },
         
         "division": function(puzzle) {
-            /* Check legal division possibilities */
+            // Check legal division possibilities
             var hasChanged = false;
             angular.forEach(puzzle.cages, function(cage) {
                 if (cage.op == "/") {
@@ -147,7 +316,7 @@ angular.module('kenkenApp')
         },
         
         "exclusion": function(puzzle) {
-            /* Exclude known values from reappearing in same column or row */
+            // Exclude known values from reappearing in same column or row
             var hasChanged = false;
             
             var rowToSolved = {};
@@ -178,7 +347,7 @@ angular.module('kenkenApp')
         },
         
         "multiplication": function(puzzle) {
-            /* Check legal multiplication possibilities */
+            // Check legal multiplication possibilities
             var hasChanged = false;
             angular.forEach(puzzle.cages, function(cage) {
                 if (cage.op == "x") {
@@ -234,7 +403,7 @@ angular.module('kenkenApp')
         },
         
         "pidgeonhole": function(puzzle) {
-            /* If possibility occurs only once in a row or column, it must appear there */
+            // If possibility occurs only once in a row or column, it must appear there
             var hasChanged = false;
             
             var puzzleSize = puzzle.board.length;
@@ -292,25 +461,8 @@ angular.module('kenkenApp')
             return hasChanged;
         },
 
-        "singletons": function(puzzle) {
-            /* If cage has only one cell, the cage total is the only possibility */
-            var hasChanged = false;
-            angular.forEach(puzzle.cages, function(cage) {
-                if (cage.cells.length == 1 && !getCell(puzzle, cage.cells[0]).solution) {
-                    var total = cage.total;
-                    var cell = getCell(puzzle, cage.cells[0])
-                    cell.possible = {};
-                    cell.possible[total] = total;
-                    
-                    hasChanged = true;
-                    // console.log("Cell "+cell.i+","+cell.j+" is singleton "+total);
-                }
-            });
-            return hasChanged;
-        },
-        
         "solved": function(puzzle) {
-            /* If cell has only one remaining posibility, mark that as solution */
+            // If cell has only one remaining posibility, mark that as solution
             var hasChanged = false;
             forEachCell(puzzle, function(cell) {
                 var possible = getValues(cell.possible)
@@ -326,7 +478,7 @@ angular.module('kenkenApp')
         },
         
         "subtraction": function(puzzle) {
-            /* Check legal subtraction possibilities */
+            // Check legal subtraction possibilities
             var hasChanged = false;
             angular.forEach(puzzle.cages, function(cage) {
                 if (cage.op == "-") {
@@ -359,9 +511,9 @@ angular.module('kenkenApp')
         },
         
         "three": function(puzzle) {
-            /** If the possibilities of three cells in the same row or column all equal the same 3
-              * numbers, those three numbers must occupy those cells, and therefore aren't possible
-              * in any other cells in the same row/column. */
+            // If the possibilities of three cells in the same row or column all equal the same 3
+            // numbers, those three numbers must occupy those cells, and therefore aren't possible
+            // in any other cells in the same row/column.
             var puzzleSize = puzzle.board.length;
             if (puzzleSize <= 3) return false;
 
@@ -430,9 +582,9 @@ angular.module('kenkenApp')
         },
         
         "twopair": function(puzzle) {
-            /** If the possibilities of two cells in the same row or column all equal the same 2
-              * numbers, those two numbers must occupy those cells, and therefore aren't possible
-              * in any other cells in the same row/column. */
+            // If the possibilities of two cells in the same row or column all equal the same 2
+            // numbers, those two numbers must occupy those cells, and therefore aren't possible
+            // in any other cells in the same row/column.
             var hasChanged = false;
             
             var puzzleSize = puzzle.board.length;
@@ -492,6 +644,7 @@ angular.module('kenkenApp')
             
             return hasChanged;
         }
+        */
     };
     this.solve = function(puzzle) {
         this.initialize(puzzle);
@@ -503,7 +656,7 @@ angular.module('kenkenApp')
             hasChanged = false;
             
             for (var name in rules) {
-                // console.log("Applying rule "+name);
+                console.log("Applying rule "+name);
                 hasChanged = rules[name](puzzle) || hasChanged;
             };
             
