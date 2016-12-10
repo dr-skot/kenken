@@ -121,24 +121,19 @@ angular.module('kenkenApp')
         })
     }
     
-    this.initialize = function(puzzle) {
-        var numRows = puzzle.board.length;
-        var numCols = puzzle.board[0].length;
-        
-        var possible = {};
-        for (var i=1; i<=numRows; ++i) {
-            possible[i] = i;
-        }
-        // console.log("Initializing possibilities: "+getValues(possible));
-        
-        forEachCell(puzzle, function(cell) {
-            cell.id = cell.i*numCols + cell.j;
-            cell.possible = angular.copy(possible)  
-            
-            delete cell.solution
+    function enforceNumbering(groups, label) {
+      groups.forEach(function(group, index) {
+        var numberings = possibleNumberings(group);
+        console.log(label, index, "numberings", numberings);
+        group.forEach(function(cell, index) {
+          cell.possible = {};
+          numberings.forEach(function(numbering) {
+            cell.possible[numbering[index]] = numbering[index];
+          });
         });
+      });
     }
-    
+
     var rules = {
 
       "singletons": function(puzzle) {
@@ -158,61 +153,32 @@ angular.module('kenkenApp')
         return hasChanged;
       },
 
+      // eliminate values that aren't part of valid solutions to the cage math
         "cage math": function(puzzle) {
-          /* Eliminate values that aren't part of valid solutions to the cage math */
-          var hasChanged = false;
           puzzle.cages.forEach(function(cage) {
             if (cage.cells.length > 1) {
               var solutions = possibleSolutions(cage.total, cage.op, cellsInCage(puzzle, cage));
               console.log("cage %d%s: %o", cage.total, cage.op, solutions);
               cellsInCage(puzzle, cage).forEach(function(cell, index) {
-                var possible = {};
+                cell.possible = {};
                 solutions.forEach(function(solution) {
-                  possible[solution[index]] = solution[index];
+                  cell.possible[solution[index]] = solution[index];
                 });
-                hasChanged = hasChanged || getValues(possible).length != getValues(cell.possible).length;
-                cell.possible = possible;
               });
             }
           });
-          return hasChanged;
         },
-        "rows": function(puzzle) {
-          var hasChanged = false;
-          puzzle.board.forEach(function(row, index) {
-            var numberings = possibleNumberings(row);
-            console.log("row", index, "numberings", numberings);
-            row.forEach(function(cell, index) {
-              var possible = {};
-              numberings.forEach(function(numbering) {
-                possible[numbering[index]] = numbering[index];
-              });
-              hasChanged = hasChanged || getValues(possible).length != getValues(cell.possible).length;
-              cell.possible = possible;
-            });
-          });
-          return hasChanged;
-        },
-        "columns": function(puzzle) {
-          var hasChanged = false;
-          for (var j = 0; j < puzzle.board[0].length; j++) {
-            var col = [];
-            for (var i = 0; i < puzzle.board.length; i++) {
-              col.push(puzzle.board[i][j]);
-            }
-            var numberings = possibleNumberings(col);
-            console.log("col", j, "numberings", numberings);
-            col.forEach(function(cell, index) {
-              var possible = {};
-              numberings.forEach(function(numbering) {
-                possible[numbering[index]] = numbering[index];
-              });
-              hasChanged = hasChanged || getValues(possible).length != getValues(cell.possible).length;
-              cell.possible = possible;
-            });
-          }
-          return hasChanged;
-        },
+
+      // each row contains exactly one instance of each value
+      "rows": function(puzzle) {
+        enforceNumbering(puzzle.board, "row");
+      },
+
+      // each column contains exactly one instance of each value
+      "columns": function(puzzle) {
+        enforceNumbering(getColumns(puzzle.board), "column");
+      },
+
         "must have in cage": function(puzzle) {
           var hasChanged = false;
           // for each row/column
@@ -646,26 +612,64 @@ angular.module('kenkenApp')
         }
         */
     };
+
+    this.initialize = function(puzzle) {
+      var numRows = puzzle.board.length;
+      var numCols = puzzle.board[0].length;
+
+      var possible = {};
+      for (var i=1; i<=numRows; ++i) {
+        possible[i] = i;
+      }
+      // console.log("Initializing possibilities: "+getValues(possible));
+
+      forEachCell(puzzle, function(cell) {
+        cell.id = cell.i*numCols + cell.j;
+        cell.possible = angular.copy(possible);
+
+        delete cell.solution;
+      });
+    };
+
+
+    function arraysMatch(a, b) {
+      if (a.length != b.length) return false;
+      for (var i = 0; i < a.length; i++) {
+        if (a[i] != b[i]) return false;
+      }
+      return true;
+    }
+
+    // boards match if the possible values are the same in every cell
+    function boardsMatch(a, b) {
+      for (var i = 0; i < a.length; i++) {
+        for (var j = 0; j < b.length; j++) {
+          if (!arraysMatch(getValues(a[i][j].possible), getValues(b[i][j].possible))) return false;
+        }
+      }
+      return true;
+    }
+
     this.solve = function(puzzle) {
         this.initialize(puzzle);
         
         var numPasses = 0;
-        var maxPasses = 20;
-        var hasChanged = true;
-        while (hasChanged) {
-            hasChanged = false;
-            
+        var maxPasses = 3;
+        while (true) {
+          var previousBoard = angular.copy(puzzle.board);
+
             for (var name in rules) {
                 console.log("Applying rule "+name);
-                hasChanged = rules[name](puzzle) || hasChanged;
-            };
+                rules[name](puzzle);
+            }
             
             ++numPasses;
-            console.log("Finished pass "+numPasses+" through rules");
-            if (numPasses > maxPasses) return;
+            console.log("Finished pass", numPasses, "through rules");
+
+            // repeat until no change, or max passes
+            if (numPasses > maxPasses || boardsMatch(puzzle.board, previousBoard)) return;
         }
         
-        // alert("solved");
-    }
+    };
 
 });
