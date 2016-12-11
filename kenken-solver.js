@@ -87,6 +87,24 @@ angular.module('kenkenApp')
       return result;
     }
 
+    function applyMustHaves(cells, solutions, mustHaveInLine, linesAreRows) {
+      for (var line = 0; line < mustHaveInLine.length; line++) {
+        for (var n in mustHaveInLine[line]) {
+          var validSolutions = [];
+          solutions.forEach(function(solution) {
+            var valid = false;
+            cells.forEach(function(cell, k) {
+              if ((linesAreRows ? cell.i : cell.j) == line && solution[k] == n) valid = true;
+            });
+            if (valid) validSolutions.push(solution);
+          });
+          solutions = validSolutions;
+        }
+      }
+      return solutions;
+    }
+
+
     function deleteIfPresent(object, val) {
         if (undefined == object[val]) return false;
         delete object[val];
@@ -120,17 +138,21 @@ angular.module('kenkenApp')
             // console.log("Eliminating "+impossible+" from "+cell.i+","+cell.j+" since "+message);
         })
     }
-    
+
+    function deleteImpossibles(cells, patterns) {
+      cells.forEach(function(cell, index) {
+        cell.possible = {};
+        patterns.forEach(function(pattern) {
+          cell.possible[pattern[index]] = pattern[index];
+        });
+      });
+    }
+
     function enforceNumbering(groups, label) {
       groups.forEach(function(group, index) {
         var numberings = possibleNumberings(group);
         console.log(label, index, "numberings", numberings);
-        group.forEach(function(cell, index) {
-          cell.possible = {};
-          numberings.forEach(function(numbering) {
-            cell.possible[numbering[index]] = numbering[index];
-          });
-        });
+        deleteImpossibles(group, numberings);
       });
     }
 
@@ -138,33 +160,25 @@ angular.module('kenkenApp')
 
       "singletons": function(puzzle) {
         /* If cage has only one cell, the cage total is the only possibility */
-        var hasChanged = false;
-        angular.forEach(puzzle.cages, function(cage) {
-          if (cage.cells.length == 1 && !getCell(puzzle, cage.cells[0]).solution) {
-            var total = cage.total;
-            var cell = getCell(puzzle, cage.cells[0])
+        puzzle.cages.forEach(function(cage) {
+          if (cage.cells.length == 1) {
+            var cell = getCell(puzzle, cage.cells[0]);
             cell.possible = {};
-            cell.possible[total] = total;
-
-            hasChanged = true;
-            // console.log("Cell "+cell.i+","+cell.j+" is singleton "+total);
+            cell.possible[cage.total] = cage.total;
           }
         });
-        return hasChanged;
       },
 
       // eliminate values that aren't part of valid solutions to the cage math
         "cage math": function(puzzle) {
           puzzle.cages.forEach(function(cage) {
             if (cage.cells.length > 1) {
-              var solutions = possibleSolutions(cage.total, cage.op, cellsInCage(puzzle, cage));
+              var cells = cellsInCage(puzzle, cage);
+              var solutions = possibleSolutions(cage.total, cage.op, cells);
+              solutions = applyMustHaves(cells, solutions, cage.mustHaveInRow, true);
+              solutions = applyMustHaves(cells, solutions, cage.mustHaveInColumn, false);
               console.log("cage %d%s: %o", cage.total, cage.op, solutions);
-              cellsInCage(puzzle, cage).forEach(function(cell, index) {
-                cell.possible = {};
-                solutions.forEach(function(solution) {
-                  cell.possible[solution[index]] = solution[index];
-                });
-              });
+              deleteImpossibles(cells, solutions);
             }
           });
         },
@@ -180,14 +194,36 @@ angular.module('kenkenApp')
       },
 
         "must have in cage": function(puzzle) {
-          var hasChanged = false;
-          // for each row/column
-          // for each number
-          // what cells is it possible in, in this row/column?
-          // are all those cells in one cage?
-          // if so, does cage know it must contain that number in this row/column?
-          // if not, tell it, and hasChanged = true
-          return hasChanged;
+          var checkLines = function(lines, linesAreRows) {
+            lines.forEach(function(line, lineIndex) {
+              for (var n = 1; n <= puzzle.board.length; n++) {
+                // does it appear in only one cage of this line?
+                var cage = null;
+                var oneCage = false;
+                line.forEach(function(cell) {
+                  if (cell.possible[n]) {
+                    if (!cage) {
+                      cage = puzzle.cages[cell.cage];
+                      oneCage = true;
+                    } else {
+                      if (cell.cage != cage.id) oneCage = false;
+                    }
+                  }
+                });
+                if (oneCage) {
+                  console.log("!!!cage", cage.id, "(" + cage.total + cage.op + ")", "must have", n, "in", (linesAreRows?"row":"column"), lineIndex);
+                  // tell cage it must use this number in this row/column
+                  var mustHaveInLine = linesAreRows ? cage.mustHaveInRow : cage.mustHaveInColumn;
+                  mustHaveInLine[lineIndex][n] = n;
+                }
+              }
+            });
+          };
+
+          checkLines(puzzle.board, true);
+          checkLines(getColumns(puzzle.board), false);
+
+          console.log("cages", puzzle.cages);
         }
         /*
         "addition": function(puzzle) {
@@ -624,10 +660,19 @@ angular.module('kenkenApp')
       // console.log("Initializing possibilities: "+getValues(possible));
 
       forEachCell(puzzle, function(cell) {
-        cell.id = cell.i*numCols + cell.j;
+        cell.id = cell.i * numCols + cell.j;
         cell.possible = angular.copy(possible);
 
         delete cell.solution;
+      });
+
+      puzzle.cages.forEach(function(cage) {
+        cage.mustHaveInRow = [];
+        cage.mustHaveInColumn = [];
+        for (i = 0; i < numRows; i++) {
+          cage.mustHaveInRow[i] = {};
+          cage.mustHaveInColumn[i] = {};
+        }
       });
     };
 
