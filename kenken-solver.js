@@ -47,9 +47,7 @@ angular.module('kenkenApp')
         aa.forEach(function(a) {
           bb.forEach(function(b) {
             var collision = inLine && a == b;
-            //if (collision) console.log("collision!", a, b);
             if (!collision && doOperation(op, a, b) == total) result.push([a, b]);
-            //if (!collision) console.log(op, a, b, total, total == doOperation(op, a, b));
           });
         });
       } else {
@@ -61,16 +59,11 @@ angular.module('kenkenApp')
             restOfCells.forEach(function(cell) {
               if (cells[0].i == cell.i || cells[0].j == cell.j) delete cell.possible[a];
             });
-            //console.log("recurse!", a, op, subtotal, restOfCells);
             var subsolutions = possibleSolutions(subtotal, op, restOfCells);
-            //console.log("subsolutions", subsolutions);
-            //console.log("prepend", a, prependToEach(a, subsolutions));
             result = result.concat(prependToEach(a, subsolutions));
-            //console.log("after recursion", result);
           }
         });
       }
-      //console.log("returning result", result);
       return result;
     }
 
@@ -151,7 +144,6 @@ angular.module('kenkenApp')
     function enforceNumbering(groups, label) {
       groups.forEach(function(group, index) {
         var numberings = possibleNumberings(group);
-        console.log(label, index, "numberings", numberings);
         deleteImpossibles(group, numberings);
       });
     }
@@ -177,7 +169,6 @@ angular.module('kenkenApp')
               var solutions = possibleSolutions(cage.total, cage.op, cells);
               solutions = applyMustHaves(cells, solutions, cage.mustHaveInRow, true);
               solutions = applyMustHaves(cells, solutions, cage.mustHaveInColumn, false);
-              console.log("cage %d%s: %o", cage.total, cage.op, solutions);
               deleteImpossibles(cells, solutions);
             }
           });
@@ -211,7 +202,6 @@ angular.module('kenkenApp')
                   }
                 });
                 if (oneCage) {
-                  console.log("!!!cage", cage.id, "(" + cage.total + cage.op + ")", "must have", n, "in", (linesAreRows?"row":"column"), lineIndex);
                   // tell cage it must use this number in this row/column
                   var mustHaveInLine = linesAreRows ? cage.mustHaveInRow : cage.mustHaveInColumn;
                   mustHaveInLine[lineIndex][n] = n;
@@ -223,7 +213,6 @@ angular.module('kenkenApp')
           checkLines(puzzle.board, true);
           checkLines(getColumns(puzzle.board), false);
 
-          console.log("cages", puzzle.cages);
         }
         /*
         "addition": function(puzzle) {
@@ -712,9 +701,14 @@ angular.module('kenkenApp')
             console.log("Finished pass", numPasses, "through rules");
 
             // repeat until no change, or max passes
-            if (numPasses > maxPasses || boardsMatch(puzzle.board, previousBoard)) return;
+            if (numPasses > maxPasses || boardsMatch(puzzle.board, previousBoard)) break;
         }
-        
+
+        forEachCell(puzzle, function(cell) {
+          var p = getValues(cell.possible);
+          if (p.length == 1) cell.guess = p[0];
+        });
+
     };
 
 });

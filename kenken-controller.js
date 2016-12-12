@@ -79,8 +79,9 @@ angular.module('kenkenApp')
       $scope.board.forEach(function(row) {
         row.forEach(function(cell) {
             cell.guess = '';
+            delete cell.possible;
         });
-      })
+      });
       $scope.time = 0;
       $scope.solved = false;
       storeValues();
