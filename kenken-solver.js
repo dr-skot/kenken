@@ -313,6 +313,70 @@ angular.module('kenkenApp')
         }
       },
 
+      "two cell multiply": function(puzzle) {
+        puzzle.cages.forEach(function(cage) {
+          if (cage.op == 'x' && cage.cells.length == 2) {
+            var cells = cellsInCage(puzzle, cage);
+            cells[0].possible.forEach(function(n) {
+              if (!cells[1].possible.includes(cage.total/n)) cells[0].possible.clear(n);
+            });
+            cells[1].possible.forEach(function(n) {
+              if (!cells[0].possible.includes(cage.total/n)) cells[1].possible.clear(n);
+            });
+          }
+        });
+      },
+
+      "two cell add": function(puzzle) {
+        puzzle.cages.forEach(function(cage) {
+          if (cage.op == '+' && cage.cells.length == 2) {
+            var cells = cellsInCage(puzzle, cage);
+            cells[0].possible.forEach(function(n) {
+              if (!cells[1].possible.includes(cage.total - n)) cells[0].possible.clear(n);
+            });
+            cells[1].possible.forEach(function(n) {
+              if (!cells[0].possible.includes(cage.total - n)) cells[1].possible.clear(n);
+            });
+          }
+        });
+      },
+
+      "divide": function(puzzle) {
+        puzzle.cages.forEach(function(cage) {
+          if (cage.op == '/') {
+            var cells = cellsInCage(puzzle, cage);
+            cells[0].possible.forEach(function(n) {
+              if (!(cells[1].possible.includes(cage.total * n) || cells[1].possible.includes(n / cage.total))) {
+                cells[0].possible.clear(n);
+              }
+            });
+            cells[1].possible.forEach(function(n) {
+              if (!(cells[0].possible.includes(cage.total * n) || cells[0].possible.includes(n / cage.total))) {
+                cells[1].possible.clear(n);
+              }
+            });
+          }
+        });
+      },
+
+      "subtract": function(puzzle) {
+        puzzle.cages.forEach(function(cage) {
+          if (cage.op == '-') {
+            var cells = cellsInCage(puzzle, cage);
+            cells[0].possible.forEach(function(n) {
+              if (!(cells[1].possible.includes(cage.total + n) || cells[1].possible.includes(n - cage.total))) {
+                cells[0].possible.clear(n);
+              }
+            });
+            cells[1].possible.forEach(function(n) {
+              if (!(cells[0].possible.includes(cage.total + n) || cells[0].possible.includes(n - cage.total))) {
+                cells[1].possible.clear(n);
+              }
+            });
+          }
+        });
+      },
+
 
       // each row contains exactly one instance of each value
       "rows": function(puzzle) {
@@ -767,7 +831,7 @@ angular.module('kenkenApp')
         var numPasses = 0;
         var maxPasses = 2;
 
-        var ruleNames = ["singletons", "no-dups", "divisor", "no-dups", "pair", "no-dups"];
+        var ruleNames = ["singletons", "no-dups", "divisor", "two cell multiply", "two cell add", "no-dups", "subtract", "divide", "no-dups", "pair", "no-dups"];
 
         while (true) {
           var previousBoard = angular.copy(puzzle.board);

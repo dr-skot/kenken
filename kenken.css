@@ -50,3 +50,7 @@ td {
 select {
     margin-top: 10px;
 }
+
+.help p {
+    margin: 0;
+}
