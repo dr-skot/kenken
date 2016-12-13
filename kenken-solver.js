@@ -253,23 +253,6 @@ angular.module('kenkenApp')
         }
       },
 
-      "divisor": function(puzzle) {
-        // multiply cage can only contain divisors of the total
-        puzzle.cages.forEach(function(cage) {
-          if (cage.op == 'x') {
-            cellsInCage(puzzle, cage).forEach(function(cell) {
-              cell.possible.forEach(function(n) {
-                var quotient = cage.total / n;
-                if (quotient != Math.round(quotient)) cell.possible.clear(n);
-                else if (cage.cells.length == 2 && (quotient == n || quotient > puzzle.board.length)) {
-                  cell.possible.clear(n);
-                }
-              });
-            });
-          }
-        });
-      },
-
       "pair": function(puzzle) {
         // If the possibilities of two cells in the same row or column all equal the same 2
         // numbers, those two numbers must occupy those cells, and therefore aren't possible
@@ -311,6 +294,50 @@ angular.module('kenkenApp')
             }
           }
         }
+      },
+
+      "divisor": function(puzzle) {
+        // multiply cage can only contain divisors of the total
+        puzzle.cages.forEach(function(cage) {
+          if (cage.op == 'x') {
+            cellsInCage(puzzle, cage).forEach(function(cell) {
+              cell.possible.forEach(function(n) {
+                var quotient = cage.total / n;
+                if (quotient != Math.round(quotient)) cell.possible.clear(n);
+                else if (cage.cells.length == 2 && (quotient == n || quotient > puzzle.board.length)) {
+                  cell.possible.clear(n);
+                }
+              });
+            });
+          }
+        });
+      },
+
+      "must have divisor": function(puzzle) {
+        var n = puzzle.board.length;
+        var mustHaveDivisors = n < 6 ? [3, 5] : n > 6 ? [5, 7] : [5];
+        puzzle.cages.forEach(function(cage) {
+          if (cage.op == 'x') {
+            mustHaveDivisors.forEach(function(d) {
+              if (cage.total % d == 0) {
+                // found a must-have divisor! now, does the cage live in one line?
+                var row = cage.cells[0][0];
+                var column = cage.cells[0][1];
+                cage.cells.forEach(function(ij) {
+                  row = ij[0] == row ? row : false;
+                  column = ij[1] == column ? column : false;
+                });
+                // if so, divisor is impossible elsewhere in that line
+                if (row) getRow(puzzle, row).forEach(function(cell) {
+                  if (cell.cage != cage.id) cell.possible.clear(d);
+                });
+                if (column) getColumn(puzzle, column).forEach(function(cell) {
+                  if (cell.cage != cage.id) cell.possible.clear(d);
+                });
+              }
+            });
+          }
+        });
       },
 
       "two cell multiply": function(puzzle) {
@@ -831,7 +858,7 @@ angular.module('kenkenApp')
         var numPasses = 0;
         var maxPasses = 2;
 
-        var ruleNames = ["singletons", "no-dups", "divisor", "two cell multiply", "two cell add", "no-dups", "subtract", "divide", "no-dups", "pair", "no-dups"];
+        var ruleNames = ["singletons", "no-dups", "divisor", "two cell multiply", "must have divisor", "two cell add", "no-dups", "subtract", "divide", "no-dups", "pair", "no-dups"];
 
         while (true) {
           var previousBoard = angular.copy(puzzle.board);
