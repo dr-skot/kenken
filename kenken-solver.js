@@ -1,7 +1,8 @@
 angular.module('kenkenApp')
   .service('KenkenSolver', function() {
 
-    // a dataset that helps keep track of what values are possible in a given cell
+    // Possibles datatype
+    // helps keep track of what values are possible in a given cell
     function Possibles(n) {
       var a = [];
       var count = 0;
@@ -33,11 +34,6 @@ angular.module('kenkenApp')
           a[i] = false;
           count -= 1;
         }
-      };
-
-      this.clearValues = function(values) {
-        var self = this;
-        values.forEach(function(i) { self.clear(i); });
       };
 
       this.includes = function(i) {
@@ -82,728 +78,432 @@ angular.module('kenkenApp')
       return this;
     }
 
-    // copies cells, guaranteeing that the possible attribute is deep-copied too
-    function copyCells(cells) {
-      var copy = angular.copy(cells);
-      copy.forEach(function(cell) { cell.possible = cell.possible.copy(); });
-      return copy;
-    }
+    // END Possibles datatype
 
-    function getRow(puzzle, i) {
-      return puzzle.board[i];
-    }
 
-    function getColumn(puzzle, j) {
-      var column = [];
-      for (var i = 0; i < puzzle.board.length; i++) {
-        column.push(puzzle.board[i][j]);
-      }
-      return column;
-    }
+    this.solve = function(puzzle) {
 
-    function getColumns(board) {
+      var board = puzzle.board;
+      var boardSize = board.length;
+
+      var rows = board;
       var columns = [];
-      for (var j = 0; j < board[0].length; j++) {
+      for (var j = 0; j < boardSize; j++) {
+        columns[j] = [];
+        for (var i = 0; i < boardSize; i++) {
+          columns[j].push(board[i][j]);
+        }
+      }
+
+
+      function cellsInCage(puzzle, cage) {
         var cells = [];
-        for (var i = 0; i < board.length; i++) {
-          cells.push(board[i][j]);
-        }
-        columns.push(cells);
+        cage.cells.forEach(function(c) { cells.push(puzzle.board[c[0]][c[1]]); });
+        return cells;
       }
-      return columns;
-    }
 
-    function prependToEach(elem, arrays) {
-      var result = [];
-      arrays.forEach(function(array) {
-        result.push([elem].concat(array));
-      });
-      return result;
-    }
 
-    function cellsInCage(puzzle, cage) {
-      var cells = [];
-      cage.cells.forEach(function(c) { cells.push(puzzle.board[c[0]][c[1]]); });
-      return cells;
-    }
+      function forEachCell(puzzle, callback) {
+        puzzle.board.forEach(function(row) { row.forEach(callback); });
+      }
 
-    function doOperation(op, a, b) {
-      return (
-        op == '/' ? Math.max(a/b, b/a) :
-          op == '-' ? Math.abs(a - b) :
-            op == '+' ? a + b :
-              op == 'x' ? a * b :
-                null);
-    }
+      function getCell(puzzle, coords) {
+        return puzzle.board[coords[0]][coords[1]];
+      }
 
-    function possibleSolutions(total, op, cells) {
-      // if (cells.length < 2) ERR!
-      // if (op != '/' or 'x' or '+' or '-') ERR!
-      var result = [];
-      var a = cells[0];
-      if (cells.count == 2) {
-        var b = cells[1];
-        var inLine = a.i == b.i || a.j == b.j;
-        a.possible.forEach(function(aa) {
-          b.possible.forEach(function(bb) {
-            var collision = inLine && aa == bb;
-            if (!collision && doOperation(op, aa, bb) == total) result.push([aa, bb]);
-          });
-        });
-      } else {
-        // if (op == '/' || op == '-') ERR
-        a.possible.forEach(function(aa) {
-          var subtotal = op == '+' ? total - aa : total / aa;
-          if (subtotal == Math.floor(subtotal)) { // skip if division left a remainder
-            var restOfCells = copyCells(cells.slice(1));
-            restOfCells.forEach(function(cell) {
-              if (cells[0].i == cell.i || cells[0].j == cell.j) cell.possible.clear(a);
-            });
-            var subsolutions = possibleSolutions(subtotal, op, restOfCells);
-            result = result.concat(prependToEach(aa, subsolutions));
+      function clear(cell, n, why) {
+        if (cell.possible.includes(n)) {
+          cell.possible.clear(n);
+          console.log("clearing %s from cell %d, %d: %s", n, cell.i, cell.j, why);
+          //console.log("possible count", cell.possible.count());
+          if (cell.possible.count() == 1) {
+            cell.solution = cell.possible.values()[0];
+            cell.guess = cell.solution;
           }
-        });
-      }
-      return result;
-    }
-
-    function possibleNumberings(cells) {
-      var result = [];
-      if (cells.length == 1) return cells[0].possible.values();
-      else cells[0].possible.forEach(function(aa) {
-        var restOfCells = copyCells(cells.slice(1));
-        restOfCells.forEach(function(cell) { cell.possible.clear(aa); });
-        var subnumberings = possibleNumberings(restOfCells);
-        result = result.concat(prependToEach(aa, subnumberings));
-      });
-      return result;
-    }
-
-    function applyMustHaves(cells, solutions, mustHaveInLine, linesAreRows) {
-      for (var line = 0; line < mustHaveInLine.length; line++) {
-        for (var n in mustHaveInLine[line]) {
-          var validSolutions = [];
-          solutions.forEach(function(solution) {
-            var valid = false;
-            cells.forEach(function(cell, k) {
-              if ((linesAreRows ? cell.i : cell.j) == line && solution[k] == n) valid = true;
-            });
-            if (valid) validSolutions.push(solution);
-          });
-          solutions = validSolutions;
         }
       }
-      return solutions;
-    }
 
-    function forEachCell(puzzle, callback) {
-      puzzle.board.forEach(function(row) { row.forEach(callback); });
-    }
-
-    function getCell(puzzle, coords) {
-      return puzzle.board[coords[0]][coords[1]];
-    }
-
-    function getValues(object) {
-      var values = [];
-      for (var key in object) {
-        values.push(object[key]);
-      }
-      return values;
-    }
-
-    function deleteImpossibles(cells, solutions) {
-      cells.forEach(function(cell, i) {
-        cell.possible.clearAll();
-        solutions.forEach(function(values) {
-          cell.possible.set(values[i]);
-        });
-      });
-    }
-
-    function enforceNumbering(groups, label) {
-      groups.forEach(function(group, index) {
-        var numberings = possibleNumberings(group);
-        deleteImpossibles(group, numberings);
-      });
-    }
-
-    function clear(cell, n, why) {
-      if (cell.possible.includes(n)) {
-        cell.possible.clear(n);
-        console.log("clearing %s from cell %d, %d: %s", n, cell.i, cell.j, why);
-        //console.log("possible count", cell.possible.count());
-        if (cell.possible.count() == 1) {
-          cell.solution = cell.possible.values()[0];
-          cell.guess = cell.solution;
+      function setOnly(cell, n, why) {
+        if (cell.solution != n) {
+          cell.possible.setOnly(n);
+          cell.solution = n;
+          cell.guess = n;
+          console.log("setting %d in cell %d, %d: %s", n, cell.i, cell.j, why);
         }
       }
-    }
 
-    function setOnly(cell, n, why) {
-      if (cell.solution != n) {
-        cell.possible.setOnly(n);
-        cell.solution = n;
-        cell.guess = n;
-        console.log("setting %d in cell %d, %d: %s", n, cell.i, cell.j, why);
-      }
-    }
+      var rules = {
 
-    var rules = {
-
-      "singletons": function(puzzle) {
-        // if cage has only one cell, that cell must contain the cage total
-        puzzle.cages.forEach(function(cage) {
-          if (cage.cells.length == 1) {
-            setOnly(cellsInCage(puzzle, cage)[0], cage.total, "singleton cage");
-          }
-        });
-      },
-
-      "no-dups": function(puzzle) {
-        for (var i = 0; i < puzzle.board.length; i++) {
-          var row = getRow(puzzle, i);
-          row.forEach(function(cell) {
-            if (cell.solution) {
-              row.forEach(function(c) {
-                if (c != cell) clear(c, cell.solution, "no dups in row");
-              });
+        "singletons": function(puzzle) {
+          // if cage has only one cell, that cell must contain the cage total
+          puzzle.cages.forEach(function(cage) {
+            if (cage.cells.length == 1) {
+              setOnly(cellsInCage(puzzle, cage)[0], cage.total, "singleton cage");
             }
           });
-          var column = getColumn(puzzle, i);
-          column.forEach(function(cell) {
-            if (cell.possible.count() == 1) {
-              var n = cell.possible.values()[0];
-              column.forEach(function(c) {
-                if (c != cell) clear(c, n, "no dups in column");
+        },
+
+        "addition": function(puzzle) {
+          // Check legal addition possibilities
+          puzzle.cages.forEach(function(cage) {
+            if (cage.op == "+") {
+              var remainder = cage.total;
+              var openCells = [];
+
+              cellsInCage(puzzle, cage).forEach(function(cell) {
+                // Calculate remainder of each cell
+                if (cell.solution) remainder -= cell.solution;
+                else openCells.push(cell);
               });
-            }
-          });
-        }
-      },
 
-      "divisor": function(puzzle) {
-        // multiply cage can only contain divisors of the total
-        puzzle.cages.forEach(function(cage) {
-          if (cage.op == 'x') {
-            cellsInCage(puzzle, cage).forEach(function(cell) {
-              cell.possible.forEach(function(n) {
-                var quotient = cage.total / n;
-                if (quotient != Math.round(quotient)) clear(cell, n, "divisor");
-                else if (cage.cells.length == 2 && (quotient == n || quotient > puzzle.board.length)) {
-                  clear(cell, n, "divisor");
-                }
-              });
-            });
-          }
-        });
-      },
-
-      "must have divisor": function(puzzle) {
-        var n = puzzle.board.length;
-        var mustHaveDivisors = n < 6 ? [3, 5] : n > 6 ? [5, 7] : [5];
-        puzzle.cages.forEach(function(cage) {
-          if (cage.op == 'x') {
-            mustHaveDivisors.forEach(function(d) {
-              if (cage.total % d == 0) {
-                // found a must-have divisor! now, does the cage live in one line?
-                var row = cage.cells[0][0];
-                var column = cage.cells[0][1];
-                cage.cells.forEach(function(ij) {
-                  row = ij[0] == row ? row : false;
-                  column = ij[1] == column ? column : false;
-                });
-                // if so, divisor is impossible elsewhere in that line
-                if (row) getRow(puzzle, row).forEach(function(cell) {
-                  if (cell.cage != cage.id) clear(cell, d, "must have divisor");
-                });
-                if (column) getColumn(puzzle, column).forEach(function(cell) {
-                  if (cell.cage != cage.id) clear(cell, d, "must have divisor");
-                });
-              }
-            });
-          }
-        });
-      },
-
-      "two cell multiply": function(puzzle) {
-        puzzle.cages.forEach(function(cage) {
-          if (cage.op == 'x' && cage.cells.length == 2) {
-            var cells = cellsInCage(puzzle, cage);
-            cells[0].possible.forEach(function(n) {
-              if (!cells[1].possible.includes(cage.total/n)) clear(cells[0], n, "two cell multiply");
-            });
-            cells[1].possible.forEach(function(n) {
-              if (!cells[0].possible.includes(cage.total/n)) clear(cells[1], n, "two cell multiply");
-            });
-          }
-        });
-      },
-
-      "two cell add": function(puzzle) {
-        puzzle.cages.forEach(function(cage) {
-          if (cage.op == '+' && cage.cells.length == 2) {
-            var cells = cellsInCage(puzzle, cage);
-            var inline = cells[0].i == cells[1].i || cells[0].j == cells[1].j;
-            var a = cells[0].possible, b = cells[1].possible;
-            a.forEach(function(n) {
-              var diff = cage.total - n;
-              if ((inline && diff == n) || !b.includes(diff)) clear(cells[0], n, "two cell add");
-            });
-            b.forEach(function(n) {
-              var diff = cage.total - n;
-              if ((inline && diff == n) || !a.includes(diff)) clear(cells[1], n, "two cell add");
-            });
-          }
-        });
-      },
-
-      "don't bust": function(puzzle) {
-        puzzle.cages.forEach(function(cage) {
-          if (cage.op == '+') {
-            var remaining = cage.total;
-            var cells = cellsInCage(puzzle, cage);
-            // subtract solved cells from total
-            cells.forEach(function(cell) {
-              if (cell.possible.count() == 1) remaining -= cell.possible.values()[0];
-            });
-            // remove cells that take us over
-            cells.forEach(function(cell) {
-              if (cell.possible.count() > 1) {
-                cell.possible.forEach(function (n) {
-                  if (n > remaining) clear(cell, n, "don't bust");
-                });
-              }
-            });
-          }
-        });
-      },
-
-      "divide": function(puzzle) {
-        puzzle.cages.forEach(function(cage) {
-          if (cage.op == '/') {
-            var cells = cellsInCage(puzzle, cage);
-            cells[0].possible.forEach(function(n) {
-              if (!(cells[1].possible.includes(cage.total * n) || cells[1].possible.includes(n / cage.total))) {
-                clear(cells[0], n, "divide");
-              }
-            });
-            cells[1].possible.forEach(function(n) {
-              if (!(cells[0].possible.includes(cage.total * n) || cells[0].possible.includes(n / cage.total))) {
-                clear(cells[1], n, "divide");
-              }
-            });
-          }
-        });
-      },
-
-      "subtract": function(puzzle) {
-        puzzle.cages.forEach(function(cage) {
-          if (cage.op == '-') {
-            var cells = cellsInCage(puzzle, cage);
-            cells[0].possible.forEach(function(n) {
-              if (!(cells[1].possible.includes(cage.total + n) || cells[1].possible.includes(n - cage.total))) {
-                clear(cells[0], n, "subtract");
-              }
-            });
-            cells[1].possible.forEach(function(n) {
-              if (!(cells[0].possible.includes(cage.total + n) || cells[0].possible.includes(n - cage.total))) {
-                clear(cells[1], n, "subtract");
-              }
-            });
-          }
-        });
-      },
-
-
-      // each row contains exactly one instance of each value
-      "rows": function(puzzle) {
-        enforceNumbering(puzzle.board, "row");
-      },
-
-      // each column contains exactly one instance of each value
-      "columns": function(puzzle) {
-        enforceNumbering(getColumns(puzzle.board), "column");
-      },
-
-      // eliminate values that aren't part of valid solutions to the cage math
-      "cage math": function(puzzle) {
-        puzzle.cages.forEach(function(cage) {
-          if (cage.cells.length > 1) {
-            var cells = cellsInCage(puzzle, cage);
-            var solutions = possibleSolutions(cage.total, cage.op, cells);
-            solutions = applyMustHaves(cells, solutions, cage.mustHaveInRow, true);
-            solutions = applyMustHaves(cells, solutions, cage.mustHaveInColumn, false);
-            deleteImpossibles(cells, solutions);
-          }
-        });
-      },
-
-      "must have in cage": function(puzzle) {
-        var checkLines = function(lines, linesAreRows) {
-          lines.forEach(function(line, lineIndex) {
-            for (var n = 1; n <= puzzle.board.length; n++) {
-              // does it appear in only one cage of this line?
-              var cage = null;
-              var oneCage = false;
-              line.forEach(function(cell) {
-                if (cell.possible[n]) {
-                  if (!cage) {
-                    cage = puzzle.cages[cell.cage];
-                    oneCage = true;
-                  } else {
-                    if (cell.cage != cage.id) oneCage = false;
-                  }
-                }
-              });
-              if (oneCage) {
-                // tell cage it must use this number in this row/column
-                var mustHaveInLine = linesAreRows ? cage.mustHaveInRow : cage.mustHaveInColumn;
-                mustHaveInLine[lineIndex][n] = n;
-              }
-            }
-          });
-        };
-
-        checkLines(puzzle.board, true);
-        checkLines(getColumns(puzzle.board), false);
-
-      },
-
-      "addition": function(puzzle) {
-        // Check legal addition possibilities
-        puzzle.cages.forEach(function(cage) {
-          if (cage.op == "+") {
-            var remainder = cage.total;
-            var openCells = [];
-
-            cellsInCage(puzzle, cage).forEach(function(cell) {
-              // Calculate remainder of each cell
-              if (cell.solution) remainder -= cell.solution;
-              else openCells.push(cell);
-            });
-
-            openCells.forEach(function(cell) {
-              cell.possible.forEach(function(n) {
-                if (n + openCells.length - 1 > remainder) {
-                  clear(cell, n, "went bust");
-                }
-              });
-            });
-
-            if (openCells.length == 1) {
-              setOnly(openCells[0], remainder, "last cell in cage");
-            } else if (openCells.length == 2) {
-              var binaryRemoval = function(cell, otherCell) {
+              openCells.forEach(function(cell) {
                 cell.possible.forEach(function(n) {
-                  if (!otherCell.possible.includes(remainder - n) ||
-                    (cage.cells.length == 2 && n + n == remainder)) {
-                    clear(cell, n, "otherCell can't accommodate");
+                  if (n + openCells.length - 1 > remainder) {
+                    clear(cell, n, "went bust");
                   }
                 });
-              };
-              binaryRemoval(openCells[0], openCells[1]);
-              binaryRemoval(openCells[1], openCells[0]);
+              });
+
+              if (openCells.length == 1) {
+                setOnly(openCells[0], remainder, "last cell in cage");
+              } else if (openCells.length == 2) {
+                var binaryRemoval = function(cell, otherCell) {
+                  cell.possible.forEach(function(n) {
+                    if (!otherCell.possible.includes(remainder - n) ||
+                      (cage.cells.length == 2 && n + n == remainder)) {
+                      clear(cell, n, "otherCell can't accommodate");
+                    }
+                  });
+                };
+                binaryRemoval(openCells[0], openCells[1]);
+                binaryRemoval(openCells[1], openCells[0]);
+              }
             }
-          }
-        });
-      },
+          });
+        },
 
-      "division": function(puzzle) {
-        // Check legal division possibilities
-        puzzle.cages.forEach(function(cage) {
-          if (cage.op == "/") {
-            var total = cage.total;
-            var cells = cellsInCage(puzzle, cage);
+        "division": function(puzzle) {
+          // Check legal division possibilities
+          puzzle.cages.forEach(function(cage) {
+            if (cage.op == "/") {
+              var total = cage.total;
+              var cells = cellsInCage(puzzle, cage);
 
-            var checkDivision = function(cell, otherCell) {
-              if (cell.solution) return;
-              cell.possible.forEach(function(n) {
-                if (!otherCell.possible.includes(n * total) && !otherCell.possible.includes(n / total)) {
-                  clear(cell, n, "other cell can't accommodate");
-                }
-              });
-            };
-            checkDivision(cells[0], cells[1]);
-            checkDivision(cells[1], cells[0]);
-          }
-        });
-      },
-
-      "exclusion": function(puzzle) {
-        // Exclude known values from reappearing in same column or row
-
-        var solvedInRow = {};
-        var solvedInCol = {};
-        var val;
-        forEachCell(puzzle, function(cell) {
-          if (cell.solution) {
-            if (!solvedInRow[cell.i]) solvedInRow[cell.i] = {};
-            if (!solvedInCol[cell.j]) solvedInCol[cell.j] = {};
-            solvedInRow[cell.i][cell.solution] = true;
-            solvedInCol[cell.j][cell.solution] = true;
-          }
-        });
-
-        forEachCell(puzzle, function(cell) {
-          if (!cell.solution) {
-            for (val in solvedInRow[cell.i]) clear(cell, val, "no dups in row");
-            for (val in solvedInCol[cell.j]) clear(cell, val, "no dups in column");
-          }
-        });
-      },
-
-      "multiplication": function(puzzle) {
-        // Check legal multiplication possibilities
-        puzzle.cages.forEach(function(cage) {
-          if (cage.op == "x") {
-            var remainder = cage.total;
-            var openCells = [];
-
-            cellsInCage(puzzle, cage).forEach(function(cell) {
-              if (cell.solution) remainder /= cell.solution;
-              else openCells.push(cell);
-            });
-
-            openCells.forEach(function(cell) {
-              cell.possible.forEach(function(n) {
-                if (remainder % n > 0) {
-                  clear(cell, n, "can't meet remainder");
-                }
-              });
-            });
-
-            if (openCells.length == 1) {
-              setOnly(openCells[0], remainder, "last cell in cage");
-            } else if (openCells.length == 2) {
-              var binaryRemoval = function(cell, otherCell) {
+              var checkDivision = function(cell, otherCell) {
+                if (cell.solution) return;
                 cell.possible.forEach(function(n) {
-                  if (!otherCell.possible.includes(remainder / n) ||
-                    (cage.cells.length == 2 && n * n == remainder)) {
+                  if (!otherCell.possible.includes(n * total) && !otherCell.possible.includes(n / total)) {
                     clear(cell, n, "other cell can't accommodate");
                   }
                 });
               };
-              binaryRemoval(openCells[0], openCells[1]);
-              binaryRemoval(openCells[1], openCells[0]);
+              checkDivision(cells[0], cells[1]);
+              checkDivision(cells[1], cells[0]);
+            }
+          });
+        },
+
+        "exclusion": function(puzzle) {
+          // Exclude known values from reappearing in same column or row
+
+          var solvedInRow = {};
+          var solvedInCol = {};
+          var val;
+          forEachCell(puzzle, function(cell) {
+            if (cell.solution) {
+              if (!solvedInRow[cell.i]) solvedInRow[cell.i] = {};
+              if (!solvedInCol[cell.j]) solvedInCol[cell.j] = {};
+              solvedInRow[cell.i][cell.solution] = true;
+              solvedInCol[cell.j][cell.solution] = true;
+            }
+          });
+
+          forEachCell(puzzle, function(cell) {
+            if (!cell.solution) {
+              for (val in solvedInRow[cell.i]) clear(cell, val, "no dups in row");
+              for (val in solvedInCol[cell.j]) clear(cell, val, "no dups in column");
+            }
+          });
+        },
+
+        "multiplication": function(puzzle) {
+          // Check legal multiplication possibilities
+          puzzle.cages.forEach(function(cage) {
+            if (cage.op == "x") {
+              var remainder = cage.total;
+              var openCells = [];
+
+              cellsInCage(puzzle, cage).forEach(function(cell) {
+                if (cell.solution) remainder /= cell.solution;
+                else openCells.push(cell);
+              });
+
+              openCells.forEach(function(cell) {
+                cell.possible.forEach(function(n) {
+                  if (remainder % n > 0) {
+                    clear(cell, n, "not divisible");
+                  }
+                });
+              });
+
+              if (openCells.length == 1) {
+                setOnly(openCells[0], remainder, "last cell in cage");
+              } else if (openCells.length == 2) {
+                var binaryRemoval = function(cell, otherCell) {
+                  cell.possible.forEach(function(n) {
+                    if (!otherCell.possible.includes(remainder / n) ||
+                      (cage.cells.length == 2 && n * n == remainder)) {
+                      clear(cell, n, "other cell can't accommodate");
+                    }
+                  });
+                };
+                binaryRemoval(openCells[0], openCells[1]);
+                binaryRemoval(openCells[1], openCells[0]);
+              }
+            }
+          });
+        },
+
+        "pigeonhole": function(puzzle) {
+          // If possibility occurs only once in a row or column, it must appear there
+          var puzzleSize = puzzle.board.length;
+
+          var countPossible = function(counter, cell) {
+            if (cell.solution) {
+              if (!counter[cell.solution]) counter[cell.solution] = 0;
+              counter[cell.solution]++;
+            } else {
+              cell.possible.forEach(function(n) {
+                if (!counter[n]) counter[n] = 0;
+                counter[n]++;
+              });
+            }
+          };
+
+          var filterSingletons = function(counter) {
+            var singletons = {};
+            for (var p in counter) if (counter[p] == 1) singletons[p] = p;
+            return singletons;
+          };
+
+          var processSingletons = function(cell, singletons) {
+            if (cell.solution) return;
+            cell.possible.forEach(function(p) {
+              if (singletons[p]) setOnly(cell, p, "pigeonholed");
+            });
+          };
+
+          for (var i = 0; i < puzzleSize; i++) {
+            var rowNumToCount = {};
+            var colNumToCount = {};
+            for (var j = 0; j < puzzleSize; j++) {
+              countPossible(rowNumToCount, getCell(puzzle, [i,j]));
+              countPossible(colNumToCount, getCell(puzzle, [j,i]));
+            }
+            var rowSingletons = filterSingletons(rowNumToCount);
+            var colSingletons = filterSingletons(colNumToCount);
+
+            for (j = 0; j < puzzleSize; j++) {
+              processSingletons(getCell(puzzle, [i,j]), rowSingletons);
+              processSingletons(getCell(puzzle, [j,i]), colSingletons);
             }
           }
-        });
-      },
+        },
 
-      "pigeonhole": function(puzzle) {
-        // If possibility occurs only once in a row or column, it must appear there
-        var puzzleSize = puzzle.board.length;
+        "subtraction": function(puzzle) {
+          // Check legal subtraction possibilities
+          puzzle.cages.forEach(function(cage) {
+            if (cage.op == "-") {
+              var total = cage.total;
+              var cells = cellsInCage(puzzle, cage);
 
-        var countPossible = function(counter, cell) {
-          if (cell.solution) {
-            if (!counter[cell.solution]) counter[cell.solution] = 0;
-            counter[cell.solution]++;
-          } else {
-            cell.possible.forEach(function(n) {
-              if (!counter[n]) counter[n] = 0;
-              counter[n]++;
-            });
-          }
-        };
+              var checkSubtraction = function (cell, otherCell) {
+                if (cell.solution) return;
+                cell.possible.forEach(function (n) {
+                  if (!otherCell.possible.includes(n + total) && !otherCell.possible.includes(n - total)) {
+                    clear(cell, n, "other cell can't accommodate");
+                  }
+                });
+              };
 
-        var filterSingletons = function(counter) {
-          var singletons = {};
-          for (var p in counter) if (counter[p] == 1) singletons[p] = p;
-          return singletons;
-        };
-
-        var processSingletons = function(cell, singletons) {
-          if (cell.solution) return;
-          cell.possible.forEach(function(p) {
-            if (singletons[p]) setOnly(cell, p, "pigeonholed");
+              checkSubtraction(cells[0], cells[1]);
+              checkSubtraction(cells[1], cells[0]);
+            }
           });
-        };
+        },
 
-        for (var i = 0; i < puzzleSize; i++) {
-          var rowNumToCount = {};
-          var colNumToCount = {};
-          for (var j = 0; j < puzzleSize; j++) {
-            countPossible(rowNumToCount, getCell(puzzle, [i,j]));
-            countPossible(colNumToCount, getCell(puzzle, [j,i]));
+        "three": function(puzzle) {
+          // If the possibilities of three cells in the same row or column all equal the same 3
+          // numbers, those three numbers must occupy those cells, and therefore aren't possible
+          // in any other cells in the same row/column.
+          var puzzleSize = puzzle.board.length;
+          if (puzzleSize <= 3) return;
+
+          var getEliminated = function(coordsA, coordsB, coordsC) {
+            var possibleA = getCell(puzzle, coordsA).possible;
+            if (possibleA.count() != 2 && possibleA.count() != 3) return;
+
+            var possibleB = getCell(puzzle, coordsB).possible;
+            if (possibleB.count() != 2 && possibleB.count() != 3) return;
+
+            var possibleC = getCell(puzzle, coordsC).possible;
+            if (possibleC.count() != 2 && possibleC.count() != 3) return;
+
+            var allPossible = possibleA.union(possibleB).union(possibleC);
+            if (allPossible.length != 3) return;
+
+            return allPossible;
+          };
+
+          for (var rowOrCol=0; rowOrCol<puzzleSize; ++rowOrCol) {
+            for (var fst=0; fst<puzzleSize-2; ++fst) {
+              for (var snd=fst+1; snd<puzzleSize-1; ++snd) {
+                for (var trd=snd+1; trd<puzzleSize; ++trd) {
+                  var eliminatedRow = getEliminated([rowOrCol, fst], [rowOrCol, snd], [rowOrCol, trd]);
+                  if (eliminatedRow) {
+                    for (var elimCol=0; elimCol<puzzleSize; ++elimCol) {
+                      if (elimCol == fst || elimCol == snd || elimCol == trd) continue;
+
+                      var cell = getCell(puzzle, [rowOrCol, elimCol]);
+                      eliminatedRow.forEach(function(impossible) {
+                        clear(cell, impossible, "three of a kind in row");
+                      });
+                    }
+                  }
+
+                  var eliminatedCol = getEliminated([fst, rowOrCol], [snd, rowOrCol], [trd, rowOrCol]);
+                  if (eliminatedCol) {
+                    for (var elimRow=0; elimRow<puzzleSize; ++elimRow) {
+                      if (elimRow == fst || elimRow == snd || elimRow == trd) continue;
+
+                      cell = getCell(puzzle, [elimRow, rowOrCol]);
+                      eliminatedCol.forEach(function(impossible) {
+                        clear(cell, impossible, "three of a kind in column");
+                      });
+                    }
+                  }
+                }
+
+              }
+            }
           }
-          var rowSingletons = filterSingletons(rowNumToCount);
-          var colSingletons = filterSingletons(colNumToCount);
+        },
 
-          for (j = 0; j < puzzleSize; j++) {
-            processSingletons(getCell(puzzle, [i,j]), rowSingletons);
-            processSingletons(getCell(puzzle, [j,i]), colSingletons);
+        "two pair": function(puzzle) {
+          // If the possibilities of two cells in the same row or column all equal the same 2
+          // numbers, those two numbers must occupy those cells, and therefore aren't possible
+          // in any other cells in the same row/column.
+
+          var board = puzzle.board;
+          var puzzleSize = board.length;
+          var cellA, cellB;
+          var rowOrCol, first, second, elimCell;
+
+          for (rowOrCol = 0; rowOrCol < puzzleSize; rowOrCol++) {
+            for (first = 0; first < puzzleSize - 1; first++) {
+
+              // row
+              cellA = board[rowOrCol][first];
+              if (cellA.possible.count() == 2) {
+                for (second = first + 1; second < puzzleSize; second++) {
+                  cellB = board[rowOrCol][second];
+                  if (cellA.possible.equals(cellB.possible)) {
+                    // pair found!
+                    var values = cellA.possible.values();
+                    for (elimCell = 0; elimCell < puzzleSize; elimCell++) {
+                      if (elimCell != first && elimCell != second) {
+                        clear(board[rowOrCol][elimCell], values[0], "two pair in row");
+                        clear(board[rowOrCol][elimCell], values[1], "two pair in row");
+                      }
+                    }
+                  }
+                }
+              }
+
+              // column
+              cellA = board[first][rowOrCol];
+              if (cellA.possible.count() == 2) {
+                for (second = first + 1; second < puzzleSize; second++) {
+                  cellB = board[second][rowOrCol];
+                  if (cellA.possible.equals(cellB.possible)) {
+                    values = cellA.possible.values();
+                    for (elimCell = 0; elimCell < puzzleSize; elimCell++) {
+                      if (elimCell != first && elimCell != second) {
+                        clear(board[elimCell][rowOrCol], values[0], "two pair in column");
+                        clear(board[elimCell][rowOrCol], values[1], "two pair in column");
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
-      },
+        },
 
-      "subtraction": function(puzzle) {
-        // Check legal subtraction possibilities
-        puzzle.cages.forEach(function(cage) {
-          if (cage.op == "-") {
-            var total = cage.total;
-            var cells = cellsInCage(puzzle, cage);
-
-            var checkSubtraction = function (cell, otherCell) {
-              if (cell.solution) return;
-              cell.possible.forEach(function (n) {
-                if (!otherCell.possible.includes(n + total) && !otherCell.possible.includes(n - total)) {
-                  clear(cell, n, "other cell can't accommodate");
+        "must have divisor": function(puzzle) {
+          var n = puzzle.board.length;
+          var mustHaveDivisors = n < 6 ? [3, 5] : n > 6 ? [5, 7] : [5];
+          puzzle.cages.forEach(function(cage) {
+            if (cage.op == 'x') {
+              mustHaveDivisors.forEach(function(d) {
+                if (cage.total % d == 0) {
+                  // found a must-have divisor! now, does the cage live in one line?
+                  var row = cage.cells[0][0];
+                  var column = cage.cells[0][1];
+                  cage.cells.forEach(function(ij) {
+                    row = ij[0] == row ? row : false;
+                    column = ij[1] == column ? column : false;
+                  });
+                  // if so, divisor is impossible elsewhere in that line
+                  if (row) rows[row].forEach(function(cell) {
+                    if (cell.cage != cage.id) clear(cell, d, "must have divisor");
+                  });
+                  if (column) columns[column].forEach(function(cell) {
+                    if (cell.cage != cage.id) clear(cell, d, "must have divisor");
+                  });
                 }
               });
-            };
+            }
+          });
+        }
 
-            checkSubtraction(cells[0], cells[1]);
-            checkSubtraction(cells[1], cells[0]);
+      };
+
+      function initialize(puzzle) {
+        var numRows = puzzle.board.length;
+        var numCols = puzzle.board[0].length;
+
+        forEachCell(puzzle, function(cell) {
+          cell.id = cell.i * numCols + cell.j;
+          cell.possible = new Possibles(numRows);
+
+          delete cell.solution;
+          delete cell.guess;
+        });
+
+        puzzle.cages.forEach(function(cage) {
+          cage.mustHaveInRow = [];
+          cage.mustHaveInColumn = [];
+          for (i = 0; i < numRows; i++) {
+            cage.mustHaveInRow[i] = {};
+            cage.mustHaveInColumn[i] = {};
           }
         });
-      },
-
-      "three": function(puzzle) {
-        // If the possibilities of three cells in the same row or column all equal the same 3
-        // numbers, those three numbers must occupy those cells, and therefore aren't possible
-        // in any other cells in the same row/column.
-        var puzzleSize = puzzle.board.length;
-        if (puzzleSize <= 3) return;
-
-        var getEliminated = function(coordsA, coordsB, coordsC) {
-          var possibleA = getCell(puzzle, coordsA).possible;
-          if (possibleA.count() != 2 && possibleA.count() != 3) return;
-
-          var possibleB = getCell(puzzle, coordsB).possible;
-          if (possibleB.count() != 2 && possibleB.count() != 3) return;
-
-          var possibleC = getCell(puzzle, coordsC).possible;
-          if (possibleC.count() != 2 && possibleC.count() != 3) return;
-
-          var allPossible = possibleA.union(possibleB).union(possibleC);
-          if (allPossible.length != 3) return;
-
-          return allPossible;
-        };
-
-        for (var rowOrCol=0; rowOrCol<puzzleSize; ++rowOrCol) {
-          for (var fst=0; fst<puzzleSize-2; ++fst) {
-            for (var snd=fst+1; snd<puzzleSize-1; ++snd) {
-              for (var trd=snd+1; trd<puzzleSize; ++trd) {
-                var eliminatedRow = getEliminated([rowOrCol, fst], [rowOrCol, snd], [rowOrCol, trd]);
-                if (eliminatedRow) {
-                  for (var elimCol=0; elimCol<puzzleSize; ++elimCol) {
-                    if (elimCol == fst || elimCol == snd || elimCol == trd) continue;
-
-                    var cell = getCell(puzzle, [rowOrCol, elimCol]);
-                    eliminatedRow.forEach(function(impossible) {
-                      clear(cell, impossible, "three of a kind in row");
-                    });
-                  }
-                }
-
-                var eliminatedCol = getEliminated([fst, rowOrCol], [snd, rowOrCol], [trd, rowOrCol]);
-                if (eliminatedCol) {
-                  for (var elimRow=0; elimRow<puzzleSize; ++elimRow) {
-                    if (elimRow == fst || elimRow == snd || elimRow == trd) continue;
-
-                    cell = getCell(puzzle, [elimRow, rowOrCol]);
-                    eliminatedCol.forEach(function(impossible) {
-                      clear(cell, impossible, "three of a kind in column");
-                    });
-                  }
-                }
-              }
-
-            }
-          }
-        }
-      },
-
-      "two pair": function(puzzle) {
-        // If the possibilities of two cells in the same row or column all equal the same 2
-        // numbers, those two numbers must occupy those cells, and therefore aren't possible
-        // in any other cells in the same row/column.
-
-        var board = puzzle.board;
-        var puzzleSize = board.length;
-        var cellA, cellB;
-        var rowOrCol, first, second, elimCell;
-
-        for (rowOrCol = 0; rowOrCol < puzzleSize; rowOrCol++) {
-          for (first = 0; first < puzzleSize - 1; first++) {
-
-            // row
-            cellA = board[rowOrCol][first];
-            if (cellA.possible.count() == 2) {
-              for (second = first + 1; second < puzzleSize; second++) {
-                cellB = board[rowOrCol][second];
-                if (cellA.possible.equals(cellB.possible)) {
-                  var values = cellA.possible.values();
-                  for (elimCell = 0; elimCell < puzzleSize; elimCell++) {
-                    if (elimCell != first && elimCell != second) {
-                      clear(board[rowOrCol][elimCell], values[0], "two pair in row");
-                      clear(board[rowOrCol][elimCell], values[1], "two pair in row");
-                    }
-                  }
-                }
-              }
-            }
-
-            // column
-            cellA = board[first][rowOrCol];
-            if (cellA.possible.count() == 2) {
-              for (second = first + 1; second < puzzleSize; second++) {
-                cellB = board[second][rowOrCol];
-                if (cellA.possible.equals(cellB.possible)) {
-                  values = cellA.possible.values();
-                  for (elimCell = 0; elimCell < puzzleSize; elimCell++) {
-                    if (elimCell != first && elimCell != second) {
-                      clear(board[elimCell][rowOrCol], values[0], "two pair in column");
-                      clear(board[elimCell][rowOrCol], values[1], "two pair in column");
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
       }
 
-    };
 
-    this.initialize = function(puzzle) {
-      var numRows = puzzle.board.length;
-      var numCols = puzzle.board[0].length;
-
-      forEachCell(puzzle, function(cell) {
-        cell.id = cell.i * numCols + cell.j;
-        cell.possible = new Possibles(numRows);
-
-        delete cell.solution;
-        delete cell.guess;
-      });
-
-      puzzle.cages.forEach(function(cage) {
-        cage.mustHaveInRow = [];
-        cage.mustHaveInColumn = [];
-        for (i = 0; i < numRows; i++) {
-          cage.mustHaveInRow[i] = {};
-          cage.mustHaveInColumn[i] = {};
+      // boards match if the possible values are the same in every cell
+      function boardsMatch(a, b) {
+        return false;
+        for (var i = 0; i < a.length; i++) {
+          for (var j = 0; j < a[0].length; j++) {
+            if (!a[i][j].possible.equals(b[i][j].possible)) return false;
+          }
         }
-      });
-    };
-
-
-    // boards match if the possible values are the same in every cell
-    function boardsMatch(a, b) {
-      return false;
-      for (var i = 0; i < a.length; i++) {
-        for (var j = 0; j < a[0].length; j++) {
-          if (!a[i][j].possible.equals(b[i][j].possible)) return false;
-        }
+        return true;
       }
-      return true;
-    }
 
-    this.solve = function(puzzle) {
-      this.initialize(puzzle);
+      initialize(puzzle);
 
       var numPasses = 0;
       var maxPasses = 6;
