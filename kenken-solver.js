@@ -95,20 +95,17 @@ angular.module('kenkenApp')
         }
       }
 
+      function cellAt(coords) { return board[coords[0]][coords[1]]; }
 
-      function cellsInCage(puzzle, cage) {
-        var cells = [];
-        cage.cells.forEach(function(c) { cells.push(puzzle.board[c[0]][c[1]]); });
-        return cells;
-      }
+      var cages = angular.copy(puzzle.cages);
+      cages.forEach(function(cage) {
+        cage.cells.forEach(function(coords, i) {
+          cage.cells[i] = cellAt(coords);
+        });
+      });
 
-
-      function forEachCell(puzzle, callback) {
-        puzzle.board.forEach(function(row) { row.forEach(callback); });
-      }
-
-      function getCell(puzzle, coords) {
-        return puzzle.board[coords[0]][coords[1]];
+      function forEachCell(callback) {
+        board.forEach(function(row) { row.forEach(callback); });
       }
 
       function clear(cell, n, why) {
@@ -136,21 +133,21 @@ angular.module('kenkenApp')
 
         "singletons": function(puzzle) {
           // if cage has only one cell, that cell must contain the cage total
-          puzzle.cages.forEach(function(cage) {
+          cages.forEach(function(cage) {
             if (cage.cells.length == 1) {
-              setOnly(cellsInCage(puzzle, cage)[0], cage.total, "singleton cage");
+              setOnly(cage.cells[0], cage.total, "singleton cage");
             }
           });
         },
 
         "addition": function(puzzle) {
           // Check legal addition possibilities
-          puzzle.cages.forEach(function(cage) {
+          cages.forEach(function(cage) {
             if (cage.op == "+") {
               var remainder = cage.total;
               var openCells = [];
 
-              cellsInCage(puzzle, cage).forEach(function(cell) {
+              cage.cells.forEach(function(cell) {
                 // Calculate remainder of each cell
                 if (cell.solution) remainder -= cell.solution;
                 else openCells.push(cell);
@@ -184,10 +181,9 @@ angular.module('kenkenApp')
 
         "division": function(puzzle) {
           // Check legal division possibilities
-          puzzle.cages.forEach(function(cage) {
+          cages.forEach(function(cage) {
             if (cage.op == "/") {
               var total = cage.total;
-              var cells = cellsInCage(puzzle, cage);
 
               var checkDivision = function(cell, otherCell) {
                 if (cell.solution) return;
@@ -197,8 +193,8 @@ angular.module('kenkenApp')
                   }
                 });
               };
-              checkDivision(cells[0], cells[1]);
-              checkDivision(cells[1], cells[0]);
+              checkDivision(cage.cells[0], cage.cells[1]);
+              checkDivision(cage.cells[1], cage.cells[0]);
             }
           });
         },
@@ -209,7 +205,7 @@ angular.module('kenkenApp')
           var solvedInRow = {};
           var solvedInCol = {};
           var val;
-          forEachCell(puzzle, function(cell) {
+          forEachCell(function(cell) {
             if (cell.solution) {
               if (!solvedInRow[cell.i]) solvedInRow[cell.i] = {};
               if (!solvedInCol[cell.j]) solvedInCol[cell.j] = {};
@@ -218,7 +214,7 @@ angular.module('kenkenApp')
             }
           });
 
-          forEachCell(puzzle, function(cell) {
+          forEachCell(function(cell) {
             if (!cell.solution) {
               for (val in solvedInRow[cell.i]) clear(cell, val, "no dups in row");
               for (val in solvedInCol[cell.j]) clear(cell, val, "no dups in column");
@@ -228,12 +224,12 @@ angular.module('kenkenApp')
 
         "multiplication": function(puzzle) {
           // Check legal multiplication possibilities
-          puzzle.cages.forEach(function(cage) {
+          cages.forEach(function(cage) {
             if (cage.op == "x") {
               var remainder = cage.total;
               var openCells = [];
 
-              cellsInCage(puzzle, cage).forEach(function(cell) {
+              cage.cells.forEach(function(cell) {
                 if (cell.solution) remainder /= cell.solution;
                 else openCells.push(cell);
               });
@@ -297,25 +293,24 @@ angular.module('kenkenApp')
             var rowNumToCount = {};
             var colNumToCount = {};
             for (var j = 0; j < puzzleSize; j++) {
-              countPossible(rowNumToCount, getCell(puzzle, [i,j]));
-              countPossible(colNumToCount, getCell(puzzle, [j,i]));
+              countPossible(rowNumToCount, board[i][j]);
+              countPossible(colNumToCount, board[j][i]);
             }
             var rowSingletons = filterSingletons(rowNumToCount);
             var colSingletons = filterSingletons(colNumToCount);
 
             for (j = 0; j < puzzleSize; j++) {
-              processSingletons(getCell(puzzle, [i,j]), rowSingletons);
-              processSingletons(getCell(puzzle, [j,i]), colSingletons);
+              processSingletons(board[i][j], rowSingletons);
+              processSingletons(board[j][i], colSingletons);
             }
           }
         },
 
         "subtraction": function(puzzle) {
           // Check legal subtraction possibilities
-          puzzle.cages.forEach(function(cage) {
+          cages.forEach(function(cage) {
             if (cage.op == "-") {
               var total = cage.total;
-              var cells = cellsInCage(puzzle, cage);
 
               var checkSubtraction = function (cell, otherCell) {
                 if (cell.solution) return;
@@ -326,8 +321,8 @@ angular.module('kenkenApp')
                 });
               };
 
-              checkSubtraction(cells[0], cells[1]);
-              checkSubtraction(cells[1], cells[0]);
+              checkSubtraction(cage.cells[0], cage.cells[1]);
+              checkSubtraction(cage.cells[1], cage.cells[0]);
             }
           });
         },
@@ -340,13 +335,13 @@ angular.module('kenkenApp')
           if (puzzleSize <= 3) return;
 
           var getEliminated = function(coordsA, coordsB, coordsC) {
-            var possibleA = getCell(puzzle, coordsA).possible;
+            var possibleA = cellAt(coordsA).possible;
             if (possibleA.count() != 2 && possibleA.count() != 3) return;
 
-            var possibleB = getCell(puzzle, coordsB).possible;
+            var possibleB = cellAt(coordsB).possible;
             if (possibleB.count() != 2 && possibleB.count() != 3) return;
 
-            var possibleC = getCell(puzzle, coordsC).possible;
+            var possibleC = cellAt(coordsC).possible;
             if (possibleC.count() != 2 && possibleC.count() != 3) return;
 
             var allPossible = possibleA.union(possibleB).union(possibleC);
@@ -364,7 +359,7 @@ angular.module('kenkenApp')
                     for (var elimCol=0; elimCol<puzzleSize; ++elimCol) {
                       if (elimCol == fst || elimCol == snd || elimCol == trd) continue;
 
-                      var cell = getCell(puzzle, [rowOrCol, elimCol]);
+                      var cell = board[rowOrCol][elimCol];
                       eliminatedRow.forEach(function(impossible) {
                         clear(cell, impossible, "three of a kind in row");
                       });
@@ -376,7 +371,7 @@ angular.module('kenkenApp')
                     for (var elimRow=0; elimRow<puzzleSize; ++elimRow) {
                       if (elimRow == fst || elimRow == snd || elimRow == trd) continue;
 
-                      cell = getCell(puzzle, [elimRow, rowOrCol]);
+                      cell = board[elimRow][rowOrCol];
                       eliminatedCol.forEach(function(impossible) {
                         clear(cell, impossible, "three of a kind in column");
                       });
@@ -443,16 +438,16 @@ angular.module('kenkenApp')
         "must have divisor": function(puzzle) {
           var n = puzzle.board.length;
           var mustHaveDivisors = n < 6 ? [3, 5] : n > 6 ? [5, 7] : [5];
-          puzzle.cages.forEach(function(cage) {
+          cages.forEach(function(cage) {
             if (cage.op == 'x') {
               mustHaveDivisors.forEach(function(d) {
                 if (cage.total % d == 0) {
                   // found a must-have divisor! now, does the cage live in one line?
-                  var row = cage.cells[0][0];
-                  var column = cage.cells[0][1];
-                  cage.cells.forEach(function(ij) {
-                    row = ij[0] == row ? row : false;
-                    column = ij[1] == column ? column : false;
+                  var row = cage.cells[0].i;
+                  var column = cage.cells[0].j;
+                  cage.cells.forEach(function(cell) {
+                    row = cell.i == row ? row : false;
+                    column = cell.j == column ? column : false;
                   });
                   // if so, divisor is impossible elsewhere in that line
                   if (row) rows[row].forEach(function(cell) {
@@ -473,7 +468,7 @@ angular.module('kenkenApp')
         var numRows = puzzle.board.length;
         var numCols = puzzle.board[0].length;
 
-        forEachCell(puzzle, function(cell) {
+        forEachCell(function(cell) {
           cell.id = cell.i * numCols + cell.j;
           cell.possible = new Possibles(numRows);
 
