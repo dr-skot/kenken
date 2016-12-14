@@ -1,7 +1,8 @@
 angular.module('kenkenApp')
   .service('KenkenSolver', function() {
 
-    // Possibles datatype
+    // MARK: Possibles datatype
+
     // helps keep track of what values are possible in a given cell
     function Possibles(n) {
       var a = [];
@@ -85,6 +86,7 @@ angular.module('kenkenApp')
 
       var board = puzzle.board;
       var boardSize = board.length;
+      var rowTotal = (boardSize + 1) * boardSize / 2;
 
       var rows = board;
       var columns = [];
@@ -94,18 +96,54 @@ angular.module('kenkenApp')
           columns[j].push(board[i][j]);
         }
       }
+      var rowsAndColumns = rows.concat(columns);
 
       function cellAt(coords) { return board[coords[0]][coords[1]]; }
 
-      var cages = angular.copy(puzzle.cages);
-      cages.forEach(function(cage) {
-        cage.cells.forEach(function(coords, i) {
-          cage.cells[i] = cellAt(coords);
-        });
+
+      // MARK: cage management
+
+      var cages = [];      // all cages in puzzle, plus new ones we'll make
+      var cageExists = {}; // avoid duplicates when we make new cages
+      function addCage(cage) {
+        var key = cage.op;
+        cage.cells.forEach(function(cell) { key += ";" + cell.i + "," + cell.j; });
+        if (!cageExists[key]) {
+          cages.push(cage);
+          cageExists[key] = true;
+        }
+      }
+      // copy puzzle cages to our solver's cage list, with real cells inside instead of coordinates
+      puzzle.cages.forEach(function(c) {
+        var cage = angular.copy(c);
+        cage.cells.forEach(function(coords, i) { cage.cells[i] = cellAt(coords); });
+        addCage(cage);
       });
+
+      // MARK: convenience functions
+
+      function arraySubtract(a, b) {
+        var result = [];
+        a.forEach(function(elem) {
+          if (b.indexOf(elem) == -1) result.push(elem);
+        });
+        return result;
+      }
 
       function forEachCell(callback) {
         board.forEach(function(row) { row.forEach(callback); });
+      }
+
+      function cellsInLine(cells) {
+        var i = cells[0].i; j = cells[0].j
+        cells.forEach(function(cell) {
+          if (i > -1 && cell.i != i) i = -1;
+          if (j > -1 && cell.j != j) j = -1;
+        });
+        // return a proper index into rowsAndColumns
+        if (i > -1) return i;
+        else if (j > -1) return boardSize + j;
+        else return false;
       }
 
       function clear(cell, n, why) {
@@ -118,6 +156,10 @@ angular.module('kenkenApp')
             cell.guess = cell.solution;
           }
         }
+      }
+
+      function clearValues(cell, values, why) {
+        values.forEach(function(n) { clear(cell, n, why); });
       }
 
       function setOnly(cell, n, why) {
@@ -387,48 +429,32 @@ angular.module('kenkenApp')
           // numbers, those two numbers must occupy those cells, and therefore aren't possible
           // in any other cells in the same row/column.
 
-          var cellA, cellB;
-          var rowOrCol, first, second, elimCell;
-
-          for (rowOrCol = 0; rowOrCol < boardSize; rowOrCol++) {
-            for (first = 0; first < boardSize - 1; first++) {
-
-              // row
-              cellA = board[rowOrCol][first];
+          rowsAndColumns.forEach(function(line) {
+            for (var i = 0; i < boardSize - 1; i++) {
+              var cellA = line[i];
               if (cellA.possible.count() == 2) {
-                for (second = first + 1; second < boardSize; second++) {
-                  cellB = board[rowOrCol][second];
-                  if (cellA.possible.equals(cellB.possible)) {
-                    // pair found!
-                    var values = cellA.possible.values();
-                    for (elimCell = 0; elimCell < boardSize; elimCell++) {
-                      if (elimCell != first && elimCell != second) {
-                        clear(board[rowOrCol][elimCell], values[0], "two pair in row");
-                        clear(board[rowOrCol][elimCell], values[1], "two pair in row");
-                      }
-                    }
-                  }
-                }
-              }
-
-              // column
-              cellA = board[first][rowOrCol];
-              if (cellA.possible.count() == 2) {
-                for (second = first + 1; second < boardSize; second++) {
-                  cellB = board[second][rowOrCol];
-                  if (cellA.possible.equals(cellB.possible)) {
-                    values = cellA.possible.values();
-                    for (elimCell = 0; elimCell < boardSize; elimCell++) {
-                      if (elimCell != first && elimCell != second) {
-                        clear(board[elimCell][rowOrCol], values[0], "two pair in column");
-                        clear(board[elimCell][rowOrCol], values[1], "two pair in column");
-                      }
+                for (var j = i + 1; j < boardSize; j++) {
+                  var cellB = line[j];
+                  if (cellB.possible.equals(cellA.possible)) {
+                    // two-pair found! remove these two values from all other cells
+                    var otherCells = arraySubtract(line, [cellA, cellB]);
+                    var v = cellA.possible.values();
+                    otherCells.forEach(function(cell) { clearValues(cell, v, "two pair in row"); });
+                    // is pair in same cage? cage bigger than 2? then make a subcage with leftover cells
+                    if (cellA.cage == cellB.cage && cages[cellA.cage].cells.length > 2) {
+                      var cage = cages[cellA.cage];
+                      var subCage = {
+                          op: cage.op,
+                          total: cage.op == '+' ? cage.total - (v[0] + v[1]) : cage.total / (v[0] * v[1]),
+                          cells: arraySubtract(cage.cells, [cellA, cellB])
+                      };
+                      addCage(subCage);
                     }
                   }
                 }
               }
             }
-          }
+          });
         },
 
         "must have divisor": function() {
@@ -454,6 +480,24 @@ angular.module('kenkenApp')
                   });
                 }
               });
+            }
+          });
+        },
+
+        "in-line addition cage": function() {
+          // If a + cage sits in a single row, then row total - cage total = total of other cells in row
+          cages.forEach(function(cage) {
+            if (cage.op == '+' && !cage.inLineChecked) {
+              var inLine = cellsInLine(cage.cells);
+              if (inLine) {
+                var subCage = {
+                  op: '+',
+                  total: rowTotal - cage.total,
+                  cells: arraySubtract(rowsAndColumns[inLine], cage.cells)
+                };
+                addCage(subCage);
+              }
+              cage.inLineChecked = true; // this only has to be done once per cage
             }
           });
         }
@@ -485,7 +529,7 @@ angular.module('kenkenApp')
       var maxPasses = 6;
 
       var ruleNames = ["singletons", "addition", "division", "exclusion", "multiplication", "pigeonhole",
-        "subtraction", "three", "two pair", "must have divisor"];
+        "subtraction", "three", "two pair", "must have divisor", "in-line addition cage"];
 
       while (true) {
         var previousBoard = angular.copy(puzzle.board);
