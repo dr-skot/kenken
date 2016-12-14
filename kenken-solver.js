@@ -131,7 +131,7 @@ angular.module('kenkenApp')
 
       var rules = {
 
-        "singletons": function(puzzle) {
+        "singletons": function() {
           // if cage has only one cell, that cell must contain the cage total
           cages.forEach(function(cage) {
             if (cage.cells.length == 1) {
@@ -140,7 +140,7 @@ angular.module('kenkenApp')
           });
         },
 
-        "addition": function(puzzle) {
+        "addition": function() {
           // Check legal addition possibilities
           cages.forEach(function(cage) {
             if (cage.op == "+") {
@@ -179,7 +179,7 @@ angular.module('kenkenApp')
           });
         },
 
-        "division": function(puzzle) {
+        "division": function() {
           // Check legal division possibilities
           cages.forEach(function(cage) {
             if (cage.op == "/") {
@@ -199,7 +199,7 @@ angular.module('kenkenApp')
           });
         },
 
-        "exclusion": function(puzzle) {
+        "exclusion": function() {
           // Exclude known values from reappearing in same column or row
 
           var solvedInRow = {};
@@ -222,7 +222,7 @@ angular.module('kenkenApp')
           });
         },
 
-        "multiplication": function(puzzle) {
+        "multiplication": function() {
           // Check legal multiplication possibilities
           cages.forEach(function(cage) {
             if (cage.op == "x") {
@@ -260,9 +260,8 @@ angular.module('kenkenApp')
           });
         },
 
-        "pigeonhole": function(puzzle) {
+        "pigeonhole": function() {
           // If possibility occurs only once in a row or column, it must appear there
-          var puzzleSize = puzzle.board.length;
 
           var countPossible = function(counter, cell) {
             if (cell.solution) {
@@ -289,24 +288,24 @@ angular.module('kenkenApp')
             });
           };
 
-          for (var i = 0; i < puzzleSize; i++) {
+          for (var i = 0; i < boardSize; i++) {
             var rowNumToCount = {};
             var colNumToCount = {};
-            for (var j = 0; j < puzzleSize; j++) {
+            for (var j = 0; j < boardSize; j++) {
               countPossible(rowNumToCount, board[i][j]);
               countPossible(colNumToCount, board[j][i]);
             }
             var rowSingletons = filterSingletons(rowNumToCount);
             var colSingletons = filterSingletons(colNumToCount);
 
-            for (j = 0; j < puzzleSize; j++) {
+            for (j = 0; j < boardSize; j++) {
               processSingletons(board[i][j], rowSingletons);
               processSingletons(board[j][i], colSingletons);
             }
           }
         },
 
-        "subtraction": function(puzzle) {
+        "subtraction": function() {
           // Check legal subtraction possibilities
           cages.forEach(function(cage) {
             if (cage.op == "-") {
@@ -327,12 +326,11 @@ angular.module('kenkenApp')
           });
         },
 
-        "three": function(puzzle) {
+        "three": function() {
           // If the possibilities of three cells in the same row or column all equal the same 3
           // numbers, those three numbers must occupy those cells, and therefore aren't possible
           // in any other cells in the same row/column.
-          var puzzleSize = puzzle.board.length;
-          if (puzzleSize <= 3) return;
+          if (boardSize <= 3) return;
 
           var getEliminated = function(coordsA, coordsB, coordsC) {
             var possibleA = cellAt(coordsA).possible;
@@ -350,13 +348,13 @@ angular.module('kenkenApp')
             return allPossible;
           };
 
-          for (var rowOrCol=0; rowOrCol<puzzleSize; ++rowOrCol) {
-            for (var fst=0; fst<puzzleSize-2; ++fst) {
-              for (var snd=fst+1; snd<puzzleSize-1; ++snd) {
-                for (var trd=snd+1; trd<puzzleSize; ++trd) {
+          for (var rowOrCol = 0; rowOrCol < boardSize; ++rowOrCol) {
+            for (var fst=0; fst<boardSize-2; ++fst) {
+              for (var snd=fst+1; snd<boardSize-1; ++snd) {
+                for (var trd=snd+1; trd<boardSize; ++trd) {
                   var eliminatedRow = getEliminated([rowOrCol, fst], [rowOrCol, snd], [rowOrCol, trd]);
                   if (eliminatedRow) {
-                    for (var elimCol=0; elimCol<puzzleSize; ++elimCol) {
+                    for (var elimCol=0; elimCol<boardSize; ++elimCol) {
                       if (elimCol == fst || elimCol == snd || elimCol == trd) continue;
 
                       var cell = board[rowOrCol][elimCol];
@@ -368,7 +366,7 @@ angular.module('kenkenApp')
 
                   var eliminatedCol = getEliminated([fst, rowOrCol], [snd, rowOrCol], [trd, rowOrCol]);
                   if (eliminatedCol) {
-                    for (var elimRow=0; elimRow<puzzleSize; ++elimRow) {
+                    for (var elimRow=0; elimRow<boardSize; ++elimRow) {
                       if (elimRow == fst || elimRow == snd || elimRow == trd) continue;
 
                       cell = board[elimRow][rowOrCol];
@@ -384,28 +382,26 @@ angular.module('kenkenApp')
           }
         },
 
-        "two pair": function(puzzle) {
+        "two pair": function() {
           // If the possibilities of two cells in the same row or column all equal the same 2
           // numbers, those two numbers must occupy those cells, and therefore aren't possible
           // in any other cells in the same row/column.
 
-          var board = puzzle.board;
-          var puzzleSize = board.length;
           var cellA, cellB;
           var rowOrCol, first, second, elimCell;
 
-          for (rowOrCol = 0; rowOrCol < puzzleSize; rowOrCol++) {
-            for (first = 0; first < puzzleSize - 1; first++) {
+          for (rowOrCol = 0; rowOrCol < boardSize; rowOrCol++) {
+            for (first = 0; first < boardSize - 1; first++) {
 
               // row
               cellA = board[rowOrCol][first];
               if (cellA.possible.count() == 2) {
-                for (second = first + 1; second < puzzleSize; second++) {
+                for (second = first + 1; second < boardSize; second++) {
                   cellB = board[rowOrCol][second];
                   if (cellA.possible.equals(cellB.possible)) {
                     // pair found!
                     var values = cellA.possible.values();
-                    for (elimCell = 0; elimCell < puzzleSize; elimCell++) {
+                    for (elimCell = 0; elimCell < boardSize; elimCell++) {
                       if (elimCell != first && elimCell != second) {
                         clear(board[rowOrCol][elimCell], values[0], "two pair in row");
                         clear(board[rowOrCol][elimCell], values[1], "two pair in row");
@@ -418,11 +414,11 @@ angular.module('kenkenApp')
               // column
               cellA = board[first][rowOrCol];
               if (cellA.possible.count() == 2) {
-                for (second = first + 1; second < puzzleSize; second++) {
+                for (second = first + 1; second < boardSize; second++) {
                   cellB = board[second][rowOrCol];
                   if (cellA.possible.equals(cellB.possible)) {
                     values = cellA.possible.values();
-                    for (elimCell = 0; elimCell < puzzleSize; elimCell++) {
+                    for (elimCell = 0; elimCell < boardSize; elimCell++) {
                       if (elimCell != first && elimCell != second) {
                         clear(board[elimCell][rowOrCol], values[0], "two pair in column");
                         clear(board[elimCell][rowOrCol], values[1], "two pair in column");
@@ -435,8 +431,8 @@ angular.module('kenkenApp')
           }
         },
 
-        "must have divisor": function(puzzle) {
-          var n = puzzle.board.length;
+        "must have divisor": function() {
+          var n = boardSize;
           var mustHaveDivisors = n < 6 ? [3, 5] : n > 6 ? [5, 7] : [5];
           cages.forEach(function(cage) {
             if (cage.op == 'x') {
@@ -464,28 +460,13 @@ angular.module('kenkenApp')
 
       };
 
-      function initialize(puzzle) {
-        var numRows = puzzle.board.length;
-        var numCols = puzzle.board[0].length;
-
+      function initialize() {
         forEachCell(function(cell) {
-          cell.id = cell.i * numCols + cell.j;
-          cell.possible = new Possibles(numRows);
-
+          cell.possible = new Possibles(boardSize);
           delete cell.solution;
           delete cell.guess;
         });
-
-        puzzle.cages.forEach(function(cage) {
-          cage.mustHaveInRow = [];
-          cage.mustHaveInColumn = [];
-          for (i = 0; i < numRows; i++) {
-            cage.mustHaveInRow[i] = {};
-            cage.mustHaveInColumn[i] = {};
-          }
-        });
       }
-
 
       // boards match if the possible values are the same in every cell
       function boardsMatch(a, b) {
