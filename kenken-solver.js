@@ -512,12 +512,19 @@ angular.module('kenkenApp')
         });
       }
 
-      // boards match if the possible values are the same in every cell
-      function boardsMatch(a, b) {
-        return false;
-        for (var i = 0; i < a.length; i++) {
-          for (var j = 0; j < a[0].length; j++) {
-            if (!a[i][j].possible.equals(b[i][j].possible)) return false;
+      function copyPossibles() {
+        var possibles = [];
+        forEachCell(function(cell) { possibles.push(cell.possible.copy()); });
+        return possibles;
+      };
+
+      // check old possible values against current board
+      function possiblesMatch(oldPossibles) {
+        for (var i = 0; i < boardSize; i++) {
+          for (var j = 0; j < boardSize; j++) {
+            var a = board[i][j].possible;
+            var b = oldPossibles[i * boardSize + j];
+            if (!a.equals(b)) return false;
           }
         }
         return true;
@@ -526,13 +533,13 @@ angular.module('kenkenApp')
       initialize(puzzle);
 
       var numPasses = 0;
-      var maxPasses = 6;
+      var maxPasses = 10;
 
       var ruleNames = ["singletons", "addition", "division", "exclusion", "multiplication", "pigeonhole",
         "subtraction", "three", "two pair", "must have divisor", "in-line addition cage"];
 
       while (true) {
-        var previousBoard = angular.copy(puzzle.board);
+        var previousBoard = copyPossibles();
 
         ruleNames.forEach(function(name) {
           console.log("Applying rule", name);
@@ -543,7 +550,7 @@ angular.module('kenkenApp')
         console.log("Finished pass", numPasses, "through rules");
 
         // repeat until no change, or max passes
-        if (numPasses >= maxPasses || boardsMatch(puzzle.board, previousBoard)) break;
+        if (numPasses >= maxPasses || possiblesMatch(previousBoard)) break;
       }
     };
 
