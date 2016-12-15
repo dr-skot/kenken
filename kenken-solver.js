@@ -115,7 +115,7 @@ angular.module('kenkenApp')
         var key = cage.op;
         cage.cells.forEach(function(cell) { key += ";" + cell.i + "," + cell.j; });
         if (!cageExists[key]) {
-          if (why) console.log("!!! NEW CAGE " + cage.total + cage.op + ": " + why);
+          if (why) console.log("!!! NEW CAGE " + cageName(cage) + ": " + why);
           cages.push(cage);
           cageExists[key] = true;
           cage.inLine = cellsInLine(cage.cells);
@@ -140,6 +140,14 @@ angular.module('kenkenApp')
 
       function cellName(cell) {
         return "(" + cell.i + "," + cell.j + ")";
+      }
+
+      function cageName(cage) {
+        var name = "[" + cage.total + cage.op + " ";
+        cage.cells.forEach(function(cell, i) {
+          name += (i > 0 ? "," : "") + cellName(cell);
+        });
+        return name + "]";
       }
 
       function forEachCell(callback) {
@@ -247,7 +255,7 @@ angular.module('kenkenApp')
                   cell.possible.forEach(function(n) {
                     if (!otherCell.possible.includes(remainder - n) ||
                       (cage.inLine > -1 && n + n == remainder)) {
-                      clear(cell, n, "" + remainder + "+: " + (remainder - n) + " not possible in other cell");
+                      clear(cell, n, "" + remainder + "+: " + (remainder - n) + " not possible in other cell " + cageName(cage));
                     }
                   });
                 };
@@ -294,7 +302,7 @@ angular.module('kenkenApp')
               openCells.forEach(function(cell) {
                 cell.possible.forEach(function(n) {
                   if (remainder % n > 0) {
-                    clear(cell, n, "not a divisor of " + remainder);
+                    clear(cell, n, "not a divisor of " + remainder + " " + cageName(cage));
                   }
                 });
               });
@@ -491,6 +499,7 @@ angular.module('kenkenApp')
               if (cage.op == '+' && cage.inLine == line) {
                 remainder -= cage.total;
                 cells = arraySubtract(cells, cage.cells);
+                i -= 1; // adjust after cells are dropped
               } else if (cell.solution) {
                 remainder -= cell.solution;
                 cells = arraySubtract(cells, [cell]);
@@ -506,21 +515,23 @@ angular.module('kenkenApp')
 
         "line product": function() {
           rowsAndColumns.forEach(function(cells, line) {
+            var rowOrColumn = line < boardSize ? "row" : "column";
             var remainder = rowProduct;
             for (i = 0; i < cells.length; i++) {
               var cell = cells[i], cage = cages[cell.cage];
               if (cage.op == 'x' && cage.inLine == line) {
                 remainder /= cage.total;
                 cells = arraySubtract(cells, cage.cells);
+                i -= 1; // adjust after cells are dropped
               } else if (cell.solution) {
                 remainder /= cell.solution;
                 cells = arraySubtract(cells, [cell]);
               }
             }
             if (cells.length == 1) {
-              setOnly(cells[0], remainder, "remainder after multiplying all other cells in row");
-            } else {
-              //addCage({ op: 'x', total: remainder, cells: cells });
+              setOnly(cells[0], remainder, "remainder of " + rowOrColumn + " product");
+            } else if (cells.length > 1 && cells.length < boardSize) {
+              addCage({ op: 'x', total: remainder, cells: cells }, "remainder of " + rowOrColumn + " " + line + " product");
             }
           });
         }
