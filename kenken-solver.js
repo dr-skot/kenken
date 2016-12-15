@@ -81,12 +81,18 @@ angular.module('kenkenApp')
 
     // END Possibles datatype
 
+    function factorial(n) {
+      if (n < 2) return 1;
+      else return n * factorial(n - 1);
+    }
+
 
     this.solve = function(puzzle) {
 
       var board = puzzle.board;
       var boardSize = board.length;
       var rowTotal = (boardSize + 1) * boardSize / 2;
+      var rowProduct = factorial(boardSize);
 
       var rows = board;
       var columns = [];
@@ -111,6 +117,7 @@ angular.module('kenkenApp')
         if (!cageExists[key]) {
           cages.push(cage);
           cageExists[key] = true;
+          cage.inLine = cellsInLine(cage.cells);
         }
       }
       // copy puzzle cages to our solver's cage list, with real cells inside instead of coordinates
@@ -135,7 +142,7 @@ angular.module('kenkenApp')
       }
 
       function cellsInLine(cells) {
-        var i = cells[0].i; j = cells[0].j
+        var i = cells[0].i, j = cells[0].j;
         cells.forEach(function(cell) {
           if (i > -1 && cell.i != i) i = -1;
           if (j > -1 && cell.j != j) j = -1;
@@ -143,7 +150,7 @@ angular.module('kenkenApp')
         // return a proper index into rowsAndColumns
         if (i > -1) return i;
         else if (j > -1) return boardSize + j;
-        else return false;
+        else return -1;
       }
 
       function clear(cell, n, why) {
@@ -209,7 +216,7 @@ angular.module('kenkenApp')
                 var binaryRemoval = function(cell, otherCell) {
                   cell.possible.forEach(function(n) {
                     if (!otherCell.possible.includes(remainder - n) ||
-                      (cage.cells.length == 2 && n + n == remainder)) {
+                      (cage.inLine > -1 && n + n == remainder)) {
                       clear(cell, n, "otherCell can't accommodate");
                     }
                   });
@@ -290,7 +297,7 @@ angular.module('kenkenApp')
                 var binaryRemoval = function(cell, otherCell) {
                   cell.possible.forEach(function(n) {
                     if (!otherCell.possible.includes(remainder / n) ||
-                      (cage.cells.length == 2 && n * n == remainder)) {
+                      (cage.inLine > -1 && n * n == remainder)) {
                       clear(cell, n, "other cell can't accommodate");
                     }
                   });
@@ -484,20 +491,44 @@ angular.module('kenkenApp')
           });
         },
 
-        "in-line addition cage": function() {
-          // If a + cage sits in a single row, then row total - cage total = total of other cells in row
-          cages.forEach(function(cage) {
-            if (cage.op == '+' && !cage.inLineChecked) {
-              var inLine = cellsInLine(cage.cells);
-              if (inLine) {
-                var subCage = {
-                  op: '+',
-                  total: rowTotal - cage.total,
-                  cells: arraySubtract(rowsAndColumns[inLine], cage.cells)
-                };
-                addCage(subCage);
+        "line sum": function() {
+          rowsAndColumns.forEach(function(cells, line) {
+            var remainder = rowTotal;
+            for (i = 0; i < cells.length; i++) {
+              var cell = cells[i], cage = cages[cell.cage];
+              if (cage.op == '+' && cage.inLine == line) {
+                remainder -= cage.total;
+                cells = arraySubtract(cells, cage.cells);
+              } else if (cell.solution) {
+                remainder -= cell.solution;
+                cells = arraySubtract(cells, [cell]);
               }
-              cage.inLineChecked = true; // this only has to be done once per cage
+            }
+            if (cells.length == 1) {
+              setOnly(cells[0], remainder, "remainder after adding up all other cells in row");
+            } else if (cells.length > 1) {
+              addCage({ op: '+', total: remainder, cells: cells });
+            }
+          });
+        },
+
+        "line product": function() {
+          rowsAndColumns.forEach(function(cells, line) {
+            var remainder = rowProduct;
+            for (i = 0; i < cells.length; i++) {
+              var cell = cells[i], cage = cages[cell.cage];
+              if (cage.op == 'x' && cage.inLine == line) {
+                remainder /= cage.total;
+                cells = arraySubtract(cells, cage.cells);
+              } else if (cell.solution) {
+                remainder /= cell.solution;
+                cells = arraySubtract(cells, [cell]);
+              }
+            }
+            if (cells.length == 1) {
+              setOnly(cells[0], remainder, "remainder after multiplying all other cells in row");
+            } else {
+              //addCage({ op: 'x', total: remainder, cells: cells });
             }
           });
         }
@@ -536,7 +567,7 @@ angular.module('kenkenApp')
       var maxPasses = 10;
 
       var ruleNames = ["singletons", "addition", "division", "exclusion", "multiplication", "pigeonhole",
-        "subtraction", "three", "two pair", "must have divisor", "in-line addition cage"];
+        "subtraction", "three", "two pair", "must have divisor", "line sum", "line product"];
 
       while (true) {
         var previousBoard = copyPossibles();
