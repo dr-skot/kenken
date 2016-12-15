@@ -111,10 +111,11 @@ angular.module('kenkenApp')
 
       var cages = [];      // all cages in puzzle, plus new ones we'll make
       var cageExists = {}; // avoid duplicates when we make new cages
-      function addCage(cage) {
+      function addCage(cage, why) {
         var key = cage.op;
         cage.cells.forEach(function(cell) { key += ";" + cell.i + "," + cell.j; });
         if (!cageExists[key]) {
+          if (why) console.log("!!! NEW CAGE " + cage.total + cage.op + ": " + why);
           cages.push(cage);
           cageExists[key] = true;
           cage.inLine = cellsInLine(cage.cells);
@@ -137,6 +138,10 @@ angular.module('kenkenApp')
         return result;
       }
 
+      function cellName(cell) {
+        return "(" + cell.i + "," + cell.j + ")";
+      }
+
       function forEachCell(callback) {
         board.forEach(function(row) { row.forEach(callback); });
       }
@@ -156,11 +161,10 @@ angular.module('kenkenApp')
       function clear(cell, n, why) {
         if (cell.possible.includes(n)) {
           cell.possible.clear(n);
-          console.log("clearing %s from cell %d, %d: %s", n, cell.i, cell.j, why);
+          console.log("(%d,%d) clear %s: %s", cell.i, cell.j, n, why);
           //console.log("possible count", cell.possible.count());
           if (cell.possible.count() == 1) {
-            cell.solution = cell.possible.values()[0];
-            cell.guess = cell.solution;
+            solve(cell, cell.possible.values()[0]);
           }
         }
       }
@@ -172,12 +176,40 @@ angular.module('kenkenApp')
       function setOnly(cell, n, why) {
         if (cell.solution != n) {
           cell.possible.setOnly(n);
-          cell.solution = n;
-          cell.guess = n;
-          console.log("setting %d in cell %d, %d: %s", n, cell.i, cell.j, why);
+          console.log("(%d,%d) set %d: %s", cell.i, cell.j, n, why);
+          solve(cell, n);
         }
       }
 
+      function solve(cell, n) {
+        console.log("SOLVED " + cellName(cell) + " = " + n);
+        cell.solution = n;
+        cell.guess = cell.solution;
+        var cage = cages[cell.cage];
+
+        // clear row & column
+        rows[cell.i].forEach(function(otherCell) {
+          if (otherCell != cell) clear(otherCell, n, "no dups allowed in row");
+        });
+        columns[cell.j].forEach(function(otherCell) {
+          if (otherCell != cell) clear(otherCell, n, "no dups allowed in column");
+        });
+
+        if ((cage.op == '+' || cage.op == 'x') && cage.cells.length > 1) {
+          var otherCells = arraySubtract(cage.cells, [cell]);
+          var newTotal = cage.op == '+' ? cage.total - n : cage.total / n;
+          if (otherCells.length == 1) {
+            // solve other cell
+            setOnly(otherCells[0], newTotal, "last cell left in " + cage.op + " cage");
+          } else {
+            // new cage
+            var newCage = { op: cage.op, total: newTotal, cells: otherCells };
+            addCage(newCage, "leftovers after solving " + cellName(cell) + " = " + n);
+          }
+        }
+      }
+
+      // TODO mark cages complete so we don't reprocess them
       var rules = {
 
         "singletons": function() {
@@ -210,14 +242,12 @@ angular.module('kenkenApp')
                 });
               });
 
-              if (openCells.length == 1) {
-                setOnly(openCells[0], remainder, "last cell in cage");
-              } else if (openCells.length == 2) {
+              if (openCells.length == 2) {
                 var binaryRemoval = function(cell, otherCell) {
                   cell.possible.forEach(function(n) {
                     if (!otherCell.possible.includes(remainder - n) ||
                       (cage.inLine > -1 && n + n == remainder)) {
-                      clear(cell, n, "otherCell can't accommodate");
+                      clear(cell, n, "" + remainder + "+: " + (remainder - n) + " not possible in other cell");
                     }
                   });
                 };
@@ -237,36 +267,14 @@ angular.module('kenkenApp')
               var checkDivision = function(cell, otherCell) {
                 if (cell.solution) return;
                 cell.possible.forEach(function(n) {
-                  if (!otherCell.possible.includes(n * total) && !otherCell.possible.includes(n / total)) {
-                    clear(cell, n, "other cell can't accommodate");
+                  var vals = [n * total, n / total];
+                  if (!otherCell.possible.includes(vals[0]) && !otherCell.possible.includes(vals[1])) {
+                    clear(cell, n, "" + total + "/: " + vals[0] + " and " + vals[1] + " not possible in other cell");
                   }
                 });
               };
               checkDivision(cage.cells[0], cage.cells[1]);
               checkDivision(cage.cells[1], cage.cells[0]);
-            }
-          });
-        },
-
-        "exclusion": function() {
-          // Exclude known values from reappearing in same column or row
-
-          var solvedInRow = {};
-          var solvedInCol = {};
-          var val;
-          forEachCell(function(cell) {
-            if (cell.solution) {
-              if (!solvedInRow[cell.i]) solvedInRow[cell.i] = {};
-              if (!solvedInCol[cell.j]) solvedInCol[cell.j] = {};
-              solvedInRow[cell.i][cell.solution] = true;
-              solvedInCol[cell.j][cell.solution] = true;
-            }
-          });
-
-          forEachCell(function(cell) {
-            if (!cell.solution) {
-              for (val in solvedInRow[cell.i]) clear(cell, val, "no dups in row");
-              for (val in solvedInCol[cell.j]) clear(cell, val, "no dups in column");
             }
           });
         },
@@ -286,7 +294,7 @@ angular.module('kenkenApp')
               openCells.forEach(function(cell) {
                 cell.possible.forEach(function(n) {
                   if (remainder % n > 0) {
-                    clear(cell, n, "not divisible");
+                    clear(cell, n, "not a divisor of " + remainder);
                   }
                 });
               });
@@ -298,7 +306,7 @@ angular.module('kenkenApp')
                   cell.possible.forEach(function(n) {
                     if (!otherCell.possible.includes(remainder / n) ||
                       (cage.inLine > -1 && n * n == remainder)) {
-                      clear(cell, n, "other cell can't accommodate");
+                      clear(cell, n, "" + remainder + "x: " + (remainder / n) + " not possible in other cell");
                     }
                   });
                 };
@@ -312,46 +320,22 @@ angular.module('kenkenApp')
         "pigeonhole": function() {
           // If possibility occurs only once in a row or column, it must appear there
 
-          var countPossible = function(counter, cell) {
-            if (cell.solution) {
-              if (!counter[cell.solution]) counter[cell.solution] = 0;
-              counter[cell.solution]++;
-            } else {
-              cell.possible.forEach(function(n) {
-                if (!counter[n]) counter[n] = 0;
-                counter[n]++;
-              });
-            }
-          };
-
-          var filterSingletons = function(counter) {
-            var singletons = {};
-            for (var p in counter) if (counter[p] == 1) singletons[p] = p;
-            return singletons;
-          };
-
-          var processSingletons = function(cell, singletons) {
-            if (cell.solution) return;
-            cell.possible.forEach(function(p) {
-              if (singletons[p]) setOnly(cell, p, "pigeonholed");
+          var counter = [];
+          var lastCellWith = [];
+          rowsAndColumns.forEach(function(cells, line) {
+            var rowOrCol = line < boardSize ? "row" : "column";
+            // reset counters
+            for (var i = 0; i < boardSize; i++) counter[i] = 0;
+            // scan cells and count possibles for each value
+            cells.forEach(function(cell) {
+              cell.possible.forEach(function(n) { counter[n]++; lastCellWith[n] = cell; });
             });
-          };
+            // any singletons? solve them
+            counter.forEach(function(count, n) {
+              if (count == 1) setOnly(lastCellWith[n], n, "only place left in " + rowOrCol + " for " + n);
+            });
+          });
 
-          for (var i = 0; i < boardSize; i++) {
-            var rowNumToCount = {};
-            var colNumToCount = {};
-            for (var j = 0; j < boardSize; j++) {
-              countPossible(rowNumToCount, board[i][j]);
-              countPossible(colNumToCount, board[j][i]);
-            }
-            var rowSingletons = filterSingletons(rowNumToCount);
-            var colSingletons = filterSingletons(colNumToCount);
-
-            for (j = 0; j < boardSize; j++) {
-              processSingletons(board[i][j], rowSingletons);
-              processSingletons(board[j][i], colSingletons);
-            }
-          }
         },
 
         "subtraction": function() {
@@ -436,17 +420,22 @@ angular.module('kenkenApp')
           // numbers, those two numbers must occupy those cells, and therefore aren't possible
           // in any other cells in the same row/column.
 
-          rowsAndColumns.forEach(function(line) {
+          rowsAndColumns.forEach(function(cells, line) {
+            var rowOrCol = line < boardSize ? "row" : "column";
             for (var i = 0; i < boardSize - 1; i++) {
-              var cellA = line[i];
+              var cellA = cells[i];
               if (cellA.possible.count() == 2) {
                 for (var j = i + 1; j < boardSize; j++) {
-                  var cellB = line[j];
+                  var cellB = cells[j];
                   if (cellB.possible.equals(cellA.possible)) {
                     // two-pair found! remove these two values from all other cells
-                    var otherCells = arraySubtract(line, [cellA, cellB]);
+                    var otherCells = arraySubtract(cells, [cellA, cellB]);
                     var v = cellA.possible.values();
-                    otherCells.forEach(function(cell) { clearValues(cell, v, "two pair in row"); });
+                    var vals = "" + v[0] + " & " + v[1];
+                    var inCells = "(" + cellA.i + "," + cellA.j + ") & (" + cellB.i + "," + cellB.j + ")";
+                    otherCells.forEach(function(cell) {
+                      clearValues(cell, v, vals + " in this " + rowOrCol + " must be in " + inCells);
+                    });
                     // is pair in same cage? cage bigger than 2? then make a subcage with leftover cells
                     if (cellA.cage == cellB.cage && cages[cellA.cage].cells.length > 2) {
                       var cage = cages[cellA.cage];
@@ -455,7 +444,7 @@ angular.module('kenkenApp')
                           total: cage.op == '+' ? cage.total - (v[0] + v[1]) : cage.total / (v[0] * v[1]),
                           cells: arraySubtract(cage.cells, [cellA, cellB])
                       };
-                      addCage(subCage);
+                      addCage(subCage, "leftovers after pair");
                     }
                   }
                 }
@@ -491,8 +480,11 @@ angular.module('kenkenApp')
           });
         },
 
+
+        // TODO this could be automatic if we make + cages for each row/column...
         "line sum": function() {
           rowsAndColumns.forEach(function(cells, line) {
+            var rowOrColumn = line < boardSize ? "row" : "column";
             var remainder = rowTotal;
             for (i = 0; i < cells.length; i++) {
               var cell = cells[i], cage = cages[cell.cage];
@@ -505,9 +497,9 @@ angular.module('kenkenApp')
               }
             }
             if (cells.length == 1) {
-              setOnly(cells[0], remainder, "remainder after adding up all other cells in row");
-            } else if (cells.length > 1) {
-              addCage({ op: '+', total: remainder, cells: cells });
+              setOnly(cells[0], remainder, "remainder of " + rowOrColumn + " sum");
+            } else if (cells.length > 1 && cells.length < boardSize) {
+              addCage({ op: '+', total: remainder, cells: cells }, "remainder of " + rowOrColumn + " " + line + " sum");
             }
           });
         },
@@ -566,7 +558,7 @@ angular.module('kenkenApp')
       var numPasses = 0;
       var maxPasses = 10;
 
-      var ruleNames = ["singletons", "addition", "division", "exclusion", "multiplication", "pigeonhole",
+      var ruleNames = ["singletons", "addition", "division", "multiplication", "pigeonhole",
         "subtraction", "three", "two pair", "must have divisor", "line sum", "line product"];
 
       while (true) {
