@@ -548,6 +548,7 @@ angular.module('kenkenApp')
             } else if (cell.solution) {
               remainder -= cell.solution;
               cells = arraySubtract(cells, [cell]);
+              i -= 1;
             }
           }
           if (cells.length == 1) {
@@ -571,6 +572,7 @@ angular.module('kenkenApp')
             } else if (cell.solution) {
               remainder /= cell.solution;
               cells = arraySubtract(cells, [cell]);
+              i -= 1;
             }
           }
           if (cells.length == 1) {
