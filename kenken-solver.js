@@ -18,44 +18,60 @@ angular.module('kenkenApp')
     var rowTotal;         // sum of cells in each row
     var rowProduct;       // product of cells in each row
 
+    var numPasses = 0;
+    var maxPasses = 50;
+    var previousBoard;
+
+    var ruleNames = ["singletons", "addition", "division", "multiplication", "pigeonhole",
+      "subtraction", "three", "two pair", "line sum", "line product"];
+    var ruleIndex = 0;
+
+    var done = true;
+
     //
     // MARK: main
     //
 
     // the main routine
-    this.solve = function(puzzle) {
-
-      initialize(puzzle);
-
-      var numPasses = 0;
-      var maxPasses = 50;
-
-      var ruleNames = ["singletons", "addition", "division", "multiplication", "pigeonhole",
-        "subtraction", "three", "two pair", "line sum", "line product"];
-
-      while (true) {
-        var previousBoard = copyPossibles();
-
-        ruleNames.forEach(function(name) {
-          console.log("Applying rule", name);
-          rules[name](puzzle);
-        });
-
-        ++numPasses;
-        console.log("Finished pass", numPasses, "through rules");
-
-        // repeat until no change, or max passes
-        if (numPasses >= maxPasses || possiblesMatch(previousBoard)) break;
+    this.step = function() {
+      if (done) {
+        console.log('done');
+      } else {
+        if (ruleIndex == 0) previousBoard = copyPossibles();
+        var rule = ruleNames[ruleIndex];
+        console.log("Applying rule", rule);
+        rules[rule]();
+        ruleIndex++;
+        if (ruleIndex >= ruleNames.length) {
+          numPasses++;
+          ruleIndex = 0;
+          console.log("Finished pass", numPasses, "through rules");
+          if (numPasses > maxPasses || possiblesMatch(previousBoard)) {
+            console.log("DONE!!!");
+            done = true;
+          }
+        }
       }
-
     };
 
+    this.solve = function(puzzle) {
+      this.initialize(puzzle);
+      while (!done) this.step();
+    };
+
+    this.done = function() { return done; };
+
     // initialize the solver
-    function initialize(puzzle) {
+    this.initialize = function(puzzle) {
       board = puzzle.board;
       boardSize = board.length;
       rowTotal = (boardSize + 1) * boardSize / 2;
       rowProduct = factorial(boardSize);
+
+      // cycle vars
+      numPasses = 0;
+      ruleIndex = 0;
+      done = false;
 
       // make convenience collections rows, columns, rowsAndColumns
       rows = board;

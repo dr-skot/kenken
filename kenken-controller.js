@@ -101,10 +101,11 @@ angular.module('kenkenApp')
       storeValues();
       startTimer();
     };
-    
+
     $scope.solveBoard = function() {
-        KenkenSolver.solve($scope);
-    }
+        if (KenkenSolver.done()) KenkenSolver.initialize($scope);
+        KenkenSolver.step();
+    };
 
     $scope.cursorAt = function(i, j) {
       return !$scope.solved && !$scope.cursorHidden && $scope.cursor[0] === i && $scope.cursor[1] === j;
