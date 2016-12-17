@@ -102,9 +102,13 @@ angular.module('kenkenApp')
       startTimer();
     };
 
-    $scope.solveBoard = function() {
+    $scope.solveStep = function() {
         if (KenkenSolver.done()) KenkenSolver.initialize($scope);
         KenkenSolver.step();
+    };
+
+    $scope.solveBoard = function() {
+      KenkenSolver.solve($scope);
     };
 
     $scope.cursorAt = function(i, j) {
@@ -144,7 +148,10 @@ angular.module('kenkenApp')
       if (k === 82) resetBoard();
       
       // s: attempt to solve
-      if (k === 83) $scope.solveBoard();
+      if (k === 83) {
+        if ($event.shiftKey) $scope.solveStep();
+        else $scope.solveBoard();
+      }
 
       if ($scope.solved) return;
 
