@@ -204,7 +204,9 @@ angular.module('kenkenApp')
       }
     }
 
-    // returns true if cells are all in the same row or column
+    // if cells are all in the same row or column, return the line number
+    // if they're not in line, return -1
+    // line number = row number for rows, boardSize + column number for columns
     function cellsInLine(cells) {
       var i = cells[0].i, j = cells[0].j;
       cells.forEach(function(cell) {
@@ -287,7 +289,7 @@ angular.module('kenkenApp')
       },
 
       "multiplication": function() {
-        // eliminate values that can't complete a multiplication cage
+          // eliminate values that can't complete a multiplication cage
         cages.forEach(function(cage) { if (cage.op == "x") {
             var remainder = cage.total;
             var openCells = [];

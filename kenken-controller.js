@@ -163,8 +163,17 @@ angular.module('kenkenApp')
 
       $scope.setCursor(i, j);
 
-      // numbers: set guess
-      if (k - 48 >= 1 && k - 48 <= n) guess(i, j, k - 48);
+      // numbers: set guess, or alter possibilities
+      if (k - 48 >= 1 && k - 48 <= n) {
+        var value = k - 48;
+        if ($event.shiftKey) {
+          b[i][j].possible.set(value);
+        } else if ($event.altKey) {
+          b[i][j].possible.clear(value);
+        } else {
+          guess(i, j, value);
+        }
+      }
 
       // space: erase guess
       else if (k === 32) guess(i, j, '');
