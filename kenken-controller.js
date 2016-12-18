@@ -4,6 +4,8 @@ angular.module('kenkenApp')
     var timer;
     var undos;
 
+    var solveIterator;
+
     function loadValues() {
       var kenken = $window.localStorage.getItem('kenken');
       //console.log('loadValues %O', kenken);
@@ -103,12 +105,14 @@ angular.module('kenkenApp')
     };
 
     $scope.solveStep = function() {
-        if (KenkenSolver.done()) KenkenSolver.initialize($scope);
-        KenkenSolver.step();
+      if (!solveIterator) solveIterator = KenkenSolver.solve($scope);
+      var step = solveIterator.next();
+      if (step.done) solveIterator = null;
+      return step;
     };
 
     $scope.solveBoard = function() {
-      KenkenSolver.solve($scope);
+      while (!$scope.solveStep().done) {}
     };
 
     $scope.cursorAt = function(i, j) {
