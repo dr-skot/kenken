@@ -24,6 +24,7 @@ angular.module('kenkenApp')
       } else {
         $scope.newBoard();
       }
+      $scope.highlight = $scope.board[0][0];
     }
 
     function storeValues() {

@@ -46,6 +46,9 @@ td {
 .wall-right {
     border-right: 3px solid black;
 }
+.highlight {
+    background-color: orange;
+}
 
 select {
     margin-top: 10px;
