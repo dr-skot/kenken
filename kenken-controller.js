@@ -123,7 +123,7 @@ angular.module('kenkenApp')
     $scope.setCursor = function(i, j) {
       $scope.cursor = [i, j];
       storeValues();
-    }
+    };
 
     $scope.checksRight = function(cell) {
       return $scope.checking && cell.guess && cell.guess === cell.ans;
