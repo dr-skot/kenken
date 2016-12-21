@@ -1,6 +1,9 @@
 angular.module('kenkenApp')
   .service('KenkenSolver', function() {
 
+    // TODO when value must be in one of two columns in row a and in same two columns in row b, eliminate from rest of columns
+    // TODO when cage must contain value (eg [2/ 248, 248] must contain 4) and is inline, eliminate value from rest of column
+
     //
     // MARK: solver variables
     //
@@ -52,6 +55,7 @@ angular.module('kenkenApp')
         if (possiblesMatch(previousBoard)) break;
       }
       console.log("DONE!!!");
+      yield null;
     };
 
     // initialize the solver
@@ -122,8 +126,7 @@ angular.module('kenkenApp')
     function *clear(cell, n, why) {
       if (cell.possible.includes(n)) {
         console.log("(%d,%d) clear %s: %s", cell.i, cell.j, n, why);
-        $scope.setCursor(cell.i, cell.j); // why doesn't this work?
-        $scope.highlight = cell;
+        $scope.setCursor(cell.i, cell.j);
         yield null;
         cell.possible.clear(n);
         if (cell.possible.count() == 1) {
@@ -134,11 +137,9 @@ angular.module('kenkenApp')
 
     // eliminate several possible values in a cell
     function *clearValues(cell, values, why) {
-      console.log("---");
       if (cell.possible.includesAny(values)) {
         console.log("%s clear! %s: %s", cellName(cell), values.join(","), why);
-        $scope.setCursor(cell.i, cell.j); // why doesn't this work?
-        $scope.highlight = cell;
+        $scope.setCursor(cell.i, cell.j);
         yield null;
         cell.possible.clear(values);
         if (cell.possible.count() == 1) {
@@ -162,8 +163,7 @@ angular.module('kenkenApp')
         if (cell.possible.includes(n)) {
           values.push(n);
           console.log("(%d,%d) clear %s: %s", cell.i, cell.j, n, why);
-          $scope.setCursor(cell.i, cell.j); // why doesn't this work?
-          $scope.highlight = cell;
+          $scope.setCursor(cell.i, cell.j);
         }
       });
       if (values.length > 0) {
@@ -180,8 +180,7 @@ angular.module('kenkenApp')
     function *setOnly(cell, n, why) {
       if (cell.solution != n) {
         console.log("(%d,%d) set %d: %s", cell.i, cell.j, n, why);
-        $scope.setCursor(cell.i, cell.j); // why doesn't this work?
-        $scope.highlight = cell;
+        $scope.setCursor(cell.i, cell.j);
         yield null;
         cell.possible.setOnly(n);
         yield *solveCell(cell, n);
@@ -195,7 +194,7 @@ angular.module('kenkenApp')
       console.log("SOLVED " + cellName(cell) + " = " + n);
       cell.solution = n;
       cell.guess = cell.solution;
-      $scope.highlight = cell;
+      $scope.setCursor(cell.i, cell.j);
       yield null;
       var cage = cages[cell.cage];
 
@@ -231,8 +230,7 @@ angular.module('kenkenApp')
           });
           if (unsolvedCells.length == 1) {
             // solve it
-            console.log("last cell left in", cage.op, "cage");
-            yield *solveCell(unsolvedCells[0], newTotal);
+            yield *setOnly(unsolvedCells[0], newTotal, "last cell left in cage", cageName(cage));
           } else if (unsolvedCells.length > 1) {
             // create new cage
             var newCage = { op: cage.op, total: newTotal, cells: unsolvedCells };
@@ -654,7 +652,7 @@ angular.module('kenkenApp')
           }
           if (cells.length == 1) {
             yield *setOnly(cells[0], remainder, "remainder of " + rowOrColumn + " product");
-          } else if (cells.length > 1 && cells.length < boardSize) {
+          } else if (cells.length > 1 && cells.length < boardSize / 2) {
             addCage({ op: 'x', total: remainder, cells: cells }, "remainder of " + rowOrColumn + " " + (line % boardSize) + " product");
           }
         });

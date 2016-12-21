@@ -24,7 +24,6 @@ angular.module('kenkenApp')
       } else {
         $scope.newBoard();
       }
-      $scope.highlight = $scope.board[0][0];
     }
 
     function storeValues() {
@@ -146,6 +145,14 @@ angular.module('kenkenApp')
       var i = c[0], j = c[1];
       var k = $event.which;
 
+      // arrow keys
+      if (k === 37) j = (j + n - 1) % n;
+      else if (k === 39) j = (j + 1) % n;
+      else if (k === 38) i = (i + n - 1) % n;
+      else if (k === 40) i = (i + 1) % n;
+
+      $scope.setCursor(i, j);
+
       // n: new board
       if (k === 78) $scope.newBoard();
 
@@ -159,14 +166,6 @@ angular.module('kenkenApp')
       }
 
       if ($scope.solved) return;
-
-      // arrow keys
-      if (k === 37) j = (j + n - 1) % n;
-      else if (k === 39) j = (j + 1) % n;
-      else if (k === 38) i = (i + n - 1) % n;
-      else if (k === 40) i = (i + 1) % n;
-
-      $scope.setCursor(i, j);
 
       // numbers: set guess, or alter possibilities
       if (k - 48 >= 1 && k - 48 <= n) {
