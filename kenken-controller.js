@@ -6,6 +6,7 @@ angular.module('kenkenApp')
 
     var solveIterator;
 
+    // TODO incorporate solver into kenken puzzle, reset on reset, new on new, etc, save possibles when saving values
     function loadValues() {
       var kenken = $window.localStorage.getItem('kenken');
       //console.log('loadValues %O', kenken);

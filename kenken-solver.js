@@ -1,13 +1,12 @@
 angular.module('kenkenApp')
   .service('KenkenSolver', function() {
 
-    // TODO when value must be in one of two columns in row a and in same two columns in row b, eliminate from rest of columns
-    // TODO when cage must contain value (eg [2/ 248, 248] must contain 4) and is inline, eliminate value from rest of column
+    // TODO when cage must contain value (eg [2/ 248, 248] must contain 4) and is inline, eliminate value from rest of line
 
     //
     // MARK: solver variables
     //
-    var $scope;           // TODO use injection for this
+    var $scope;
 
     var board;            // the grid
     var boardSize;        // size of grid
@@ -23,7 +22,7 @@ angular.module('kenkenApp')
     var rowProduct;       // product of cells in each row
 
     var ruleNames = ["singleton", "divisor", "division", "multiplication", "subtraction", "pigeonhole", "addition!" , "two pair",
-      "three", "line product"];
+      "three", "two and two", "line sum", "line product"];
 
     //
     // MARK: test
@@ -581,6 +580,63 @@ angular.module('kenkenApp')
         });
       },
 
+      "two and two": function*() {
+        // if a value must be in either column a or b in two different rows,
+        // eliminate value in all other rows of column a and b
+        // (sort of like pigeonhole x two pair)
+        var pairs = [];
+
+        yield *[rows, columns].yieldEach(function*(lines) {
+
+          var linesAreRows = lines == rows;
+          var crossers = linesAreRows ? columns : rows;
+          var lineLabel = linesAreRows ? "row" : "column";
+          var crosserLabel = linesAreRows ? "column" : "row";
+
+          // reset pairs
+          for (var n = 1; n <= boardSize; n++) pairs[n] = [];
+
+          // scan lines for pairs
+          lines.forEach(function (cells, line) {
+            // count how many cells each value is possible in
+            for (var n = 1; n <= boardSize; n++) {
+              var cellsWithValue = [];
+              cells.forEach(function (cell, i) {
+                if (cell.possible.includes(n)) {
+                  if (cellsWithValue.length < 3) cellsWithValue.push(i); // don't collect past 3 occurrences
+                }
+              });
+              // if only two cells have this value, it's a pair! save it
+              if (cellsWithValue.length == 2) pairs[n].push({line: line, cells: cellsWithValue});
+            }
+          });
+
+          // any pair of line pairs share the same crossers?
+          for (n = 1; n <= boardSize; n++) { if (pairs[n].length > 1) {
+            // look for a match
+            for (var j = 0; j < pairs[n].length - 1; j++) {
+              for (var k = j + 1; k < pairs[n].length; k++) {
+                var pairA = pairs[n][j], pairB = pairs[n][k];
+                  if (pairA.cells.matches(pairB.cells)) {
+                    // found one!
+                    var why = "this " + crosserLabel + "'s " + n + " must occur in " +
+                      lineLabel + " " + pairA.line + " or " + pairB.line;
+                    yield *pairA.cells.yieldEach(function*(pairCell) {
+                      yield *crossers[pairCell].yieldEach(function*(cell) {
+                        var thisLine = linesAreRows ? cell.i : cell.j;
+                        if (thisLine != pairA.line && thisLine != pairB.line) {
+                          yield *clear(cell, n, why);
+                        }
+                      });
+                    });
+                  }
+                }
+              }
+            }
+          }
+        });
+      },
+
       "must-have divisor": function() {
         var n = boardSize;
         var mustHaveDivisors = n < 6 ? [3, 5] : n > 6 ? [5, 7] : [5];
@@ -608,8 +664,6 @@ angular.module('kenkenApp')
         });
       },
 
-
-      // TODO this could be automatic if we make + cages for each row/column...
       "line sum": function*() {
         yield *rowsAndColumns.yieldEach(function*(cells, line) {
           var rowOrColumn = line < boardSize ? "row" : "column";
@@ -628,7 +682,7 @@ angular.module('kenkenApp')
           }
           if (cells.length == 1) {
             yield *setOnly(cells[0], remainder, "remainder of " + rowOrColumn + " sum");
-          } else if (cells.length > 1 && cells.length < boardSize) {
+          } else if (cells.length > 1 && cells.length < boardSize / 2) {
             addCage({ op: '+', total: remainder, cells: cells }, "remainder of " + rowOrColumn + " " + (line % boardSize) + " sum");
           }
         });
@@ -690,6 +744,14 @@ angular.module('kenkenApp')
         s += this[i];
       }
       return s;
+    };
+
+    Array.prototype.matches = function(b) {
+      if (b.length != this.length) return false;
+      for (var i = 0; i < this.length; i++) {
+        if (b[i] != this[i]) return false;
+      }
+      return true;
     };
 
     //
