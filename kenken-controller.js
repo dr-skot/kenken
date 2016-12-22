@@ -160,7 +160,7 @@ angular.module('kenkenApp')
 
       // r: reset board
       if (k === 82) resetBoard();
-      
+
       // s: attempt to solve
       if (k === 83) {
         $scope.showPossibles = true;
@@ -174,16 +174,21 @@ angular.module('kenkenApp')
       if (k - 48 >= 1 && k - 48 <= n) {
         var value = k - 48;
         var possible = b[i][j].possible;
-        if ($event.shiftKey && !possible[value]) {
-          possible[value] = true;
-          possible[0]++;
-        } else if ($event.altKey && possible[value]) {
-          possible[value] = false;
-          possible[0]--;
+        if ($event.shiftKey) {
+          if (!possible[value]) {
+            possible[value] = true;
+            possible[0]++;
+          }
+        } else if ($event.altKey) {
+          if (possible[value]) {
+            possible[value] = false;
+            possible[0]--;
+          }
         } else {
           guess(i, j, value);
         }
       }
+
 
       // space: erase guess
       else if (k === 32) guess(i, j, '');
