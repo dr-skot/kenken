@@ -26,7 +26,7 @@
                 <div class="label" ng-show="cell.isFirstInCage">
                     {{ cages[cell.cage].total }}<span class="operator" ng-bind-html="cages[cell.cage].op | operators"></span>
                 </div>
-                <div class="possible" ng-hide="cell.guess">
+                <div class="possible" ng-hide="cell.guess || !showPossibles">
                     <span ng-repeat="value in cell.possible track by $index"><span ng-if="value === true">{{ $index }}</span></span>
                 </div>
             </td>
@@ -50,9 +50,10 @@
     <div class="help">
     <p>return: check puzzle</p>
     <p>?: reveal square</p>
-    <p>s: solve</p>
+    <p>p: show/hide possible values</p>
     <p>r: reset</p>
     <p>n: new puzzle</p>
+    <p>s: solve</p>
     <p>esc: undo</p>
     </div>
 </body>

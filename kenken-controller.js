@@ -16,6 +16,7 @@ angular.module('kenkenApp')
         $scope.cages = kenken.cages;
         $scope.cursor = kenken.cursor || [0, 0];
         $scope.time = kenken.time || 0;
+        $scope.showPossibles = kenken.showPossibles == true;
         $scope.solved = KenkenService.isSolved($scope.board);
         undos = kenken.undos || [];
         $scope.solver = KenkenSolver.getSolver($scope);
@@ -27,7 +28,8 @@ angular.module('kenkenApp')
 
     function storeValues() {
       var s = $scope;
-      var kenken = { boardSize: s.boardSize, ops: s.ops, board: s.board, cages: s.cages, cursor: s.cursor, time: s.time };
+      var kenken = { boardSize: s.boardSize, ops: s.ops, board: s.board, cages: s.cages, cursor: s.cursor,
+        time: s.time, showPossibles: s.showPossibles };
       $window.localStorage.setItem('kenken', JSON.stringify(kenken));
       //console.log('storeValues %O', JSON.stringify(kenken));
     }
@@ -97,6 +99,7 @@ angular.module('kenkenApp')
       $scope.cages = board.cages;
       $scope.cursor = [0,0];
       $scope.time = 0;
+      $scope.showPossibles = false;
       $scope.solved = false;
       undos = [];
       $scope.solver = KenkenSolver.getSolver($scope);
@@ -146,6 +149,9 @@ angular.module('kenkenApp')
 
       // n: new board
       if (k === 78) $scope.newBoard();
+
+      // p: show/hide possible values
+      if (k === 80) $scope.showPossibles = !$scope.showPossibles;
 
       // r: reset board
       if (k === 82) resetBoard();
