@@ -4,8 +4,6 @@ angular.module('kenkenApp')
     var timer;
     var undos;
 
-    var solveIterator;
-
     function loadValues() {
       var kenken = $window.localStorage.getItem('kenken');
       //console.log('loadValues %O', kenken);
@@ -20,7 +18,7 @@ angular.module('kenkenApp')
         $scope.time = kenken.time || 0;
         $scope.solved = KenkenService.isSolved($scope.board);
         undos = kenken.undos || [];
-        KenkenSolver.initialize($scope);
+        $scope.solver = KenkenSolver.getSolver($scope);
         if (!$scope.solved) startTimer();
       } else {
         $scope.newBoard();
@@ -87,8 +85,7 @@ angular.module('kenkenApp')
       });
       $scope.time = 0;
       $scope.solved = false;
-      KenkenSolver.reset();
-      solveIterator = null;
+      $scope.solver.reset();
       storeValues();
       console.log('reset! undos %O', undos);
     }
@@ -102,21 +99,11 @@ angular.module('kenkenApp')
       $scope.time = 0;
       $scope.solved = false;
       undos = [];
-      KenkenSolver.initialize($scope);
-      KenkenSolver.reset();
+      $scope.solver = KenkenSolver.getSolver($scope);
+      $scope.solver.reset();
 
       storeValues();
       startTimer();
-    };
-
-    $scope.solveStep = function() {
-      if (!solveIterator) solveIterator = KenkenSolver.solve($scope);
-      var step = solveIterator.next();
-      return step;
-    };
-
-    $scope.solveBoard = function() {
-      while (!$scope.solveStep().done) {}
     };
 
     $scope.cursorAt = function(i, j) {
@@ -165,8 +152,8 @@ angular.module('kenkenApp')
       
       // s: attempt to solve
       if (k === 83) {
-        if ($event.shiftKey) $scope.solveStep();
-        else $scope.solveBoard();
+        if ($event.shiftKey) $scope.solver.step();
+        else $scope.solver.solve();
       }
 
       if ($scope.solved) return;
