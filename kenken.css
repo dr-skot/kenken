@@ -26,7 +26,7 @@ td {
     color: gray;
 }
 .cursor {
-    background-color: orange;
+    background-color: yellow;
 }
 .good {
     background-color: lightgreen;
@@ -45,6 +45,9 @@ td {
 }
 .wall-right {
     border-right: 3px solid black;
+}
+.highlight {
+    background-color: lightyellow;
 }
 
 select {

@@ -54,6 +54,7 @@ angular.module('kenkenApp')
         $scope.solved = true;
       }
     }
+    $scope.guess = guess;
 
     function peek(i, j) {
       var cell = $scope.board[i][j];
@@ -130,6 +131,10 @@ angular.module('kenkenApp')
       return KenkenService.cellWalls($scope.board, i, j);
     };
 
+    $scope.isHighlighted = function(cell) {
+      return $scope.highlight && $scope.highlight.indexOf(cell) > -1 && !$scope.cursorAt(cell.i, cell.j);
+    };
+
     $scope.keydown = function($event) {
       // console.log('keydown: %d', $event.which);
 
@@ -158,6 +163,7 @@ angular.module('kenkenApp')
       
       // s: attempt to solve
       if (k === 83) {
+        $scope.showPossibles = true;
         if ($event.shiftKey) $scope.solver.step();
         else $scope.solver.solve();
       }
@@ -167,10 +173,13 @@ angular.module('kenkenApp')
       // numbers: set guess, or alter possibilities
       if (k - 48 >= 1 && k - 48 <= n) {
         var value = k - 48;
-        if ($event.shiftKey) {
-          b[i][j].possible.set(value);
-        } else if ($event.altKey) {
-          b[i][j].possible.clear(value);
+        var possible = b[i][j].possible;
+        if ($event.shiftKey && !possible[value]) {
+          possible[value] = true;
+          possible[0]++;
+        } else if ($event.altKey && possible[value]) {
+          possible[value] = false;
+          possible[0]--;
         } else {
           guess(i, j, value);
         }

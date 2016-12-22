@@ -9,25 +9,34 @@ angular.module('kenkenApp')
       // MARK: solver variables
       //
 
-      var board;            // the grid
-      var boardSize;        // size of grid
+      var board = $scope.board;                   // the grid
+      var boardSize = board.length;               // size of grid
 
-      var rows;             // the grid rows
-      var columns;          // the grid columns
-      var rowsAndColumns;   // = rows.concat(columns)
+      var rows = board;                           // the grid rows
+      var columns = rowsToColumns(board);         // the grid columns
+      var rowsAndColumns = rows.concat(columns);  // both
 
-      var cages;            // math cages in the board, plus new ones we'll make
-      var cageExists;       // check this to avoid duplicates when we make new cages
+      var rowTotal = arithSum(boardSize);         // sum of cells in each row
+      var rowProduct = factorial(boardSize);      // product of cells in each row
 
-      var rowTotal;         // sum of cells in each row
-      var rowProduct;       // product of cells in each row
+      var cages = [];         // math cages in the board, plus new ones we'll make
+      var cageExists = {};    // check this to avoid duplicates when we make new cages
+      initializeCages();
 
+      // the rules used by the solver, in order
       var ruleNames = ["singleton", "divisor", "division", "multiplication", "subtraction", "pigeonhole", "addition", "two pair",
         "three", "two and two", "line sum", "line product"];
 
-      var stepIterator;
-
+      // iterator for stepwise solving
+      var stepIterator = null;
       var done = false;
+
+      // the object that will be returned
+      var solver = {
+        solve: solveFully,
+        step: step,
+        reset: reset
+      };
 
       //
       // MARK: main solving routine
@@ -50,6 +59,7 @@ angular.module('kenkenApp')
         }
         console.log("DONE!!!");
         done = true;
+        $scope.highlight = null;
         yield null;
       }
 
@@ -66,36 +76,7 @@ angular.module('kenkenApp')
       // MARK: initialization and resetting
       //
 
-      // initialize the solver
-      function initialize(puzzle) {
-        $scope = puzzle;
-        board = puzzle.board;
-        boardSize = board.length;
-        rowTotal = (boardSize + 1) * boardSize / 2;
-        rowProduct = factorial(boardSize);
-
-        // make convenience collections rows, columns, rowsAndColumns
-        rows = board;
-        columns = [];
-        for (var j = 0; j < boardSize; j++) {
-          columns[j] = [];
-          for (var i = 0; i < boardSize; i++) {
-            columns[j].push(board[i][j]);
-          }
-        }
-        rowsAndColumns = rows.concat(columns);
-
-        // set up possible values if not already set
-        rows.forEach(function (cells) {
-          cells.forEach(function (cell) {
-            if (!cell.possible) cell.possible = pNew(boardSize);
-          })
-        });
-
-        resetCages();
-      }
-
-      function resetCages() {
+      function initializeCages() {
         // reset cages
         cages = [];
         cageExists = {};
@@ -120,7 +101,7 @@ angular.module('kenkenApp')
           })
         });
 
-        resetCages();
+        initializeCages();
         stepIterator = null;
 
         done = false;
@@ -141,9 +122,10 @@ angular.module('kenkenApp')
       }
 
       // eliminate possible values in a cell
-      function *clear(cell, values, why) {
+      function *clear(cell, values, why, cage) {
         if (!(values instanceof Array)) values = [values];
         if (pYes(cell.possible, values)) {
+          $scope.highlight = cage ? cage.cells : null;
           console.log("%s clear %s: %s", cellName(cell), values.join(","), why);
           $scope.setCursor(cell.i, cell.j);
           yield null;
@@ -155,8 +137,9 @@ angular.module('kenkenApp')
       }
 
       // set a single value as the only possibility in a cell
-      function *setOnly(cell, n, why) {
+      function *setOnly(cell, n, why, cage) {
         if (cell.solution != n) {
+          $scope.highlight = cage ? cage.cells : null;
           console.log("%s set %d: %s", cellName(cell), n, why);
           $scope.setCursor(cell.i, cell.j);
           yield null;
@@ -171,8 +154,8 @@ angular.module('kenkenApp')
         if (cell.ans != n) console.log("!!!!! WRONG");
         console.log("SOLVED " + cellName(cell) + " = " + n);
         cell.solution = n;
-        cell.guess = cell.solution;
         $scope.setCursor(cell.i, cell.j);
+        $scope.guess(cell.i, cell.j, n);
         yield null;
 
         // clear row & column
@@ -202,10 +185,10 @@ angular.module('kenkenApp')
         } else if (cage.op == '+' || cage.op == 'x') {
           // if in a + or x cage, make a smaller cage with the unsolved cells
           if (unsolvedCells.length == 1) {
-            yield *setOnly(unsolvedCells[0], newTotal, "last cell left in cage", cageName(cage));
+            yield *setOnly(unsolvedCells[0], newTotal, "last cell left in cage", cage);
           } else if (unsolvedCells.length > 1) {
             var newCage = {op: cage.op, total: newTotal, cells: unsolvedCells};
-            addCage(newCage, "leftovers after solving " + cellName(cell) + " = " + n);
+            yield *addCageAndYield(newCage, "leftovers after solving " + cellName(cell) + " = " + n);
           }
         }
 
@@ -228,6 +211,12 @@ angular.module('kenkenApp')
           cageExists[key] = true;
           cage.inLine = cellsInLine(cage.cells);
         }
+      }
+
+      function *addCageAndYield(cage, why) {
+        addCage(cage, why);
+        $scope.highlight = cage.cells;
+        yield;
       }
 
       // if cells are all in the same row or column, return the line number
@@ -327,7 +316,7 @@ angular.module('kenkenApp')
             pEach(cell.possible, function (n) {
               if (cage.total % n != 0) nondivisors.push(n);
             });
-            if (nondivisors.length > 0) yield *clear(cell, nondivisors, "not a divisor of " + cage.total);
+            if (nondivisors.length > 0) yield *clear(cell, nondivisors, "not a divisor of " + cage.total, cage);
           });
         },
 
@@ -375,7 +364,7 @@ angular.module('kenkenApp')
                 values.push(n);
               }
             });
-            if (values.length > 0) yield *clear(cell, values, "counterpart not possible in other cell");
+            if (values.length > 0) yield *clear(cell, values, "counterpart not possible in other cell", cage);
           });
         },
 
@@ -407,7 +396,7 @@ angular.module('kenkenApp')
                   pSet(possibles[cell.j + boardSize], n);
 
                 });
-                if (values.length > 0) yield *clear(cell, values, "rest of cage impossible");
+                if (values.length > 0) yield *clear(cell, values, "rest of cage impossible", cage);
               });
             }
           });
@@ -428,7 +417,7 @@ angular.module('kenkenApp')
                 }
               });
               if (count == 1 && !target.solution) {
-                yield *setOnly(target, n, "only place left in " + rowOrCol + " for " + n);
+                yield *setOnly(target, n, "only place left in " + rowOrCol + " for " + n, {cells: cells});
               }
             }
           });
@@ -444,7 +433,7 @@ angular.module('kenkenApp')
                 values.push(n);
               }
             });
-            if (values.length > 0) yield *clear(cell, values, "counterpart not possible in other cell");
+            if (values.length > 0) yield *clear(cell, values, "counterpart not possible in other cell", cage);
           });
         },
 
@@ -463,21 +452,21 @@ angular.module('kenkenApp')
                   if (cellB.possible.matches(cellA.possible)) {
                     // two-pair found! remove these two values from all other cells
                     var otherCells = arraySubtract(cells, [cellA, cellB]);
-                    var v = pValues(cellA.possible);
-                    var vals = "" + v[0] + "-" + v[1];
-                    var inCells = cellName(cellA) + " & " + cellName(cellB);
+                    var vals = pValues(cellA.possible);
+                    var why = "" + vals[0] + "-" + vals[1] + " in this " + rowOrCol +
+                      " live in " + cellName(cellA) + " & " + cellName(cellB);
                     yield *otherCells.yieldEach(function*(cell) {
-                      yield *clear(cell, v, vals + " in this " + rowOrCol + " must be in " + inCells);
+                      yield *clear(cell, vals, why, {cells: [cellA, cellB]});
                     });
                     // is pair in same cage? cage bigger than 2? then make a subcage with leftover cells
                     if (cellA.cage == cellB.cage && cages[cellA.cage].cells.length > 2) {
                       var cage = cages[cellA.cage];
                       var subCage = {
                         op: cage.op,
-                        total: cage.op == '+' ? cage.total - (v[0] + v[1]) : cage.total / (v[0] * v[1]),
+                        total: cage.op == '+' ? cage.total - (vals[0] + vals[1]) : cage.total / (vals[0] * vals[1]),
                         cells: arraySubtract(cage.cells, [cellA, cellB])
                       };
-                      addCage(subCage, "leftovers after pair");
+                      yield *addCageAndYield(subCage, "leftovers after pair");
                     }
                   }
                 }
@@ -508,11 +497,11 @@ angular.module('kenkenApp')
                   if (pCount(possibleABC) == 3) {
                     // threesome found! remove these three values from all other cells
                     var otherCells = arraySubtract(cells, [cellA, cellB, cellC]);
-                    var v = pValues(possibleABC);
-                    var vals = "" + v[0] + "-" + v[1] + "-" + v[2];
-                    var inCells = cellName(cellA) + "," + cellName(cellB) + "," + cellName(cellC);
+                    var vals = pValues(possibleABC);
+                    var why = "" + vals[0] + "-" + vals[1] + "-" + vals[2] + " in this " + rowOrCol +
+                      " live in " + cellName(cellA) + "," + cellName(cellB) + "," + cellName(cellC);
                     yield *otherCells.yieldEach(function*(cell) {
-                      yield *clear(cell, v, vals + " in this " + rowOrCol + " must be in " + inCells);
+                      yield *clear(cell, vals, why, {cells: [cellA, cellB, cellC]});
                     });
                   }
                 }
@@ -560,13 +549,17 @@ angular.module('kenkenApp')
                     var pairA = pairs[n][j], pairB = pairs[n][k];
                     if (pairA.cells.matches(pairB.cells)) {
                       // found one!
+                      var i1 = pairA.line, i2 = pairB.line, j1 = pairA.cells[0], j2 = pairA.cells[1];
+                      var foursome = linesAreRows ?
+                        [board[i1][j1], board[i1][j2], board[i2][j1], board[i2][j2]] :
+                        [board[j1][i1], board[j1][i2], board[j2][i1], board[j2][i2]];
                       var why = "this " + crosserLabel + "'s " + n + " must occur in " +
-                        lineLabel + " " + pairA.line + " or " + pairB.line;
+                        lineLabel + " " + i1 + " or " + i2;
                       yield *pairA.cells.yieldEach(function*(pairCell) {
                         yield *crossers[pairCell].yieldEach(function*(cell) {
                           var thisLine = linesAreRows ? cell.i : cell.j;
                           if (thisLine != pairA.line && thisLine != pairB.line) {
-                            yield *clear(cell, n, why);
+                            yield *clear(cell, n, why, {cells: foursome});
                           }
                         });
                       });
@@ -609,6 +602,7 @@ angular.module('kenkenApp')
         "line sum": function*() {
           yield *rowsAndColumns.yieldEach(function*(cells, line) {
             var rowOrColumn = line < boardSize ? "row" : "column";
+            var why = "remainder of " + rowOrColumn + " sum";
             var remainder = rowTotal;
             for (var i = 0; i < cells.length; i++) {
               var cell = cells[i], cage = cages[cell.cage];
@@ -623,13 +617,9 @@ angular.module('kenkenApp')
               }
             }
             if (cells.length == 1) {
-              yield *setOnly(cells[0], remainder, "remainder of " + rowOrColumn + " sum");
+              yield *setOnly(cells[0], remainder, why);
             } else if (cells.length > 1 && cells.length < boardSize / 2) {
-              addCage({
-                op: '+',
-                total: remainder,
-                cells: cells
-              }, "remainder of " + rowOrColumn + " " + (line % boardSize) + " sum");
+              yield *addCageAndYield({ op: '+', total: remainder, cells: cells }, why);
             }
           });
         },
@@ -637,6 +627,7 @@ angular.module('kenkenApp')
         "line product": function*() {
           yield *rowsAndColumns.yieldEach(function*(cells, line) {
             var rowOrColumn = line < boardSize ? "row" : "column";
+            var why = "remainder of " + rowOrColumn + " product";
             var remainder = rowProduct;
             for (var i = 0; i < cells.length; i++) {
               var cell = cells[i], cage = cages[cell.cage];
@@ -651,25 +642,16 @@ angular.module('kenkenApp')
               }
             }
             if (cells.length == 1) {
-              yield *setOnly(cells[0], remainder, "remainder of " + rowOrColumn + " product");
+              yield *setOnly(cells[0], remainder, why);
             } else if (cells.length > 1 && cells.length < boardSize / 2) {
-              addCage({
-                op: 'x',
-                total: remainder,
-                cells: cells
-              }, "remainder of " + rowOrColumn + " " + (line % boardSize) + " product");
+              yield *addCageAndYield({ op: 'x', total: remainder, cells: cells }, why);
             }
           });
         }
 
       };
 
-      initialize($scope);
-      return {
-        solve: solveFully,
-        step: step,
-        reset: reset
-      };
+      return solver;
     };
 
     //
@@ -756,6 +738,12 @@ angular.module('kenkenApp')
     // MARK: utility functions
     //
 
+    // sum of integers from 1 to n
+    function arithSum(n) {
+      return (n + 1) * n / 2
+    }
+
+    // product of integers from 1 to n
     function factorial(n) {
       if (n < 2) return 1;
       else return n * factorial(n - 1);
@@ -767,6 +755,17 @@ angular.module('kenkenApp')
         if (b.indexOf(elem) == -1) result.push(elem);
       });
       return result;
+    }
+
+    function rowsToColumns(a) {
+      var columns = [];
+      for (var j = 0; j < a[0].length; j++) {
+        columns[j] = [];
+        for (var i = 0; i < a.length; i++) {
+          columns[j].push(a[i][j]);
+        }
+      }
+      return columns;
     }
 
     Array.prototype.yieldEach = function*(fn) {
