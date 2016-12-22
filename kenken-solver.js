@@ -24,8 +24,8 @@ angular.module('kenkenApp')
       initializeCages();
 
       // the rules used by the solver, in order
-      var ruleNames = ["singleton", "divisor", "division", "multiplication", "subtraction", "pigeonhole", "addition", "two pair",
-        "three", "two and two", "line sum", "line product"];
+      var ruleNames = ["singleton", "divisor", "must-have divisor", "division", "multiplication", "subtraction",
+        "pigeonhole", "addition", "two pair", "three", "two and two", "line sum", "line product"];
 
       // iterator for stepwise solving
       var stepIterator = null;
@@ -571,31 +571,18 @@ angular.module('kenkenApp')
           });
         },
 
-        // not fully implemented yet
-        "must-have divisor": function () {
+        "must-have divisor": function*() {
           var n = boardSize;
           var mustHaveDivisors = n < 6 ? [3, 5] : n > 6 ? [5, 7] : [5];
-          cages.forEach(function (cage) {
-            if (cage.op == 'x') {
-              mustHaveDivisors.forEach(function (d) {
-                if (cage.total % d == 0) {
-                  // found a must-have divisor! now, does the cage live in one line?
-                  var row = cage.cells[0].i;
-                  var column = cage.cells[0].j;
-                  cage.cells.forEach(function (cell) {
-                    row = cell.i == row ? row : false;
-                    column = cell.j == column ? column : false;
-                  });
-                  // if so, divisor is impossible elsewhere in that line
-                  if (row) rows[row].forEach(function (cell) {
-                    if (cell.cage != cage.id) clear(cell, d, "must have divisor");
-                  });
-                  if (column) columns[column].forEach(function (cell) {
-                    if (cell.cage != cage.id) clear(cell, d, "must have divisor");
-                  });
-                }
-              });
-            }
+          yield *yieldCageCells('x', function*(cage) {
+            yield *mustHaveDivisors.yieldEach(function*(d) {
+              if (cage.total % d == 0 && cage.inLine > 0) {
+                var why = "" + d + " must live in cage " + cageName(cage);
+                yield *rowsAndColumns[cage.inLine].yieldEach(function*(cell) {
+                  if (cage.cells.indexOf(cell) < 0) yield *clear(cell, d, why, cage);
+                });
+              }
+            });
           });
         },
 
