@@ -27,7 +27,7 @@
                     {{ cages[cell.cage].total }}<span class="operator" ng-bind-html="cages[cell.cage].op | operators"></span>
                 </div>
                 <div class="possible" ng-hide="cell.guess">
-                    <span ng-repeat="value in cell.possible.values()">{{ value }}</span>
+                    <span ng-repeat="value in cell.possible track by $index"><span ng-if="value === true">{{ $index }}</span></span>
                 </div>
             </td>
         </tr>

@@ -24,6 +24,7 @@ angular.module('kenkenApp')
     var ruleNames = ["singleton", "divisor", "division", "multiplication", "subtraction", "pigeonhole", "addition" , "two pair",
       "three", "two and two", "line sum", "line product"];
 
+    var done = false;
 
     //
     // MARK: main
@@ -31,8 +32,8 @@ angular.module('kenkenApp')
 
     // TODO solver should be an object, with puzzle ($scope) as constructor parameter
     // the main routine
-    this.solve = function*(puzzle) {
-      initialize(puzzle);
+    this.solve = function*() {
+      if (done) return;
       var maxPasses = 50;
       for (var numPasses = 1; numPasses < maxPasses; numPasses++) {
         var previousBoard = copyPossibles();
@@ -45,11 +46,12 @@ angular.module('kenkenApp')
         if (possiblesMatch(previousBoard)) break;
       }
       console.log("DONE!!!");
+      done = true;
       yield null;
     };
 
     // initialize the solver
-    function initialize(puzzle) {
+    this.initialize = function(puzzle) {
       $scope = puzzle;
       board = puzzle.board;
       boardSize = board.length;
@@ -67,25 +69,39 @@ angular.module('kenkenApp')
       }
       rowsAndColumns = rows.concat(columns);
 
-      // in each cell, reset solution, guess, and possible values
+      // set up possible values if not already set
       rows.forEach(function(cells) { cells.forEach(function(cell) {
-        cell.possible = new Possibles(boardSize);
-        delete cell.solution;
-        delete cell.guess;
+        if (!cell.possible) cell.possible = pNew(boardSize);
       })});
 
+      resetCages();
+    };
+
+    function resetCages() {
       // reset cages
       cages = [];
       cageExists = {};
 
       // copy puzzle cages to our solver's cage list, with real cells inside instead of coordinates
-      puzzle.cages.forEach(function(c) {
+      $scope.cages.forEach(function(c) {
         var cage = angular.copy(c);
         cage.cells.forEach(function(coords, i) { cage.cells[i] = cellAt(coords); });
         addCage(cage);
       });
-
     }
+
+    this.reset = function() {
+      // in each cell, reset solution, guess, and possible values
+      rows.forEach(function(cells) { cells.forEach(function(cell) {
+        cell.possible = pNew(boardSize);
+        delete cell.solution;
+        delete cell.guess;
+      })});
+
+      resetCages();
+
+      done = false;
+    };
 
     //
     // MARK: managing possible values in cells (also see Possibles datatype below)
@@ -95,7 +111,7 @@ angular.module('kenkenApp')
     function copyPossibles() {
       var possibles = [];
       rows.forEach(function(cells) { cells.forEach(function(cell) {
-        possibles.push(cell.possible.copy());
+        possibles.push(angular.copy(cell.possible));
       })});
       return possibles;
     }
@@ -106,7 +122,7 @@ angular.module('kenkenApp')
         for (var j = 0; j < boardSize; j++) {
           var a = board[i][j].possible;
           var b = oldPossibles[i * boardSize + j];
-          if (!a.equals(b)) return false;
+          if (!a.matches(b)) return false;
         }
       }
       return true;
@@ -119,16 +135,16 @@ angular.module('kenkenApp')
 
     function *yieldAndClear(cell, values) {
       yield null;
-      cell.possible.clear(values);
-      if (cell.possible.count() == 1) {
-        yield *solveCell(cell, cell.possible.values()[0]);
+      pClear(cell.possible, values);
+      if (pCount(cell.possible) == 1) {
+        yield *solveCell(cell, pFirstValue(cell.possible));
       }
     }
 
     // eliminate possible values in a cell
     function *clear(cell, values, why) {
       if (!(values instanceof Array)) values = [values];
-      if (cell.possible.includesAny(values)) {
+      if (pYes(cell.possible, values)) {
         logClear(cell, values, why);
         yield *yieldAndClear(cell, values);
       }
@@ -140,7 +156,7 @@ angular.module('kenkenApp')
         console.log("%s set %d: %s", cellName(cell), n, why);
         $scope.setCursor(cell.i, cell.j);
         yield null;
-        cell.possible.setOnly(n);
+        pSetOnly(cell.possible, n);
         yield *solveCell(cell, n);
       }
     }
@@ -157,7 +173,7 @@ angular.module('kenkenApp')
       if (clearBuffer.length > 1) console.log("---");
       clearBuffer.forEach(function(c) {
         cell = c.cell, n = c.value, why = c.why;
-        if (cell.possible.includes(n)) {
+        if (pYes(cell.possible, n)) {
           values.push(n);
           logClear(cell, [n], why);
         }
@@ -179,9 +195,9 @@ angular.module('kenkenApp')
       // clear row & column
       yield *rows[cell.i].concat(columns[cell.j]).yieldEach(function*(otherCell) {
         if (!otherCell.solution) {
-          otherCell.possible.clear(n);
-          if (otherCell.possible.count() == 1) {
-            yield *solveCell(otherCell, otherCell.possible.values()[0]);
+          pClear(otherCell.possible, n);
+          if (pCount(otherCell.possible) == 1) {
+            yield *solveCell(otherCell, pFirstValue(otherCell.possible));
           }
         }
       });
@@ -247,7 +263,7 @@ angular.module('kenkenApp')
     function rowAndColumnPossibles() {
       var possibles = [];
       for (var i = 0; i < boardSize * 2; i++) {
-        possibles[i] = new Possibles(boardSize);
+        possibles[i] = pNew(boardSize);
       }
       return possibles;
     }
@@ -258,7 +274,7 @@ angular.module('kenkenApp')
       var row = cells[0].i, column = cells[0].j + boardSize;
 
       function isPossible(value) {
-        return cells[0].possible.includes(value) && possibles[row].includes(value) && possibles[column].includes(value);
+        return pYes(cells[0].possible, value) && pYes(possibles[row], value) && pYes(possibles[column], value);
       }
 
       if (cells.length == 1) return isPossible(total);
@@ -269,9 +285,9 @@ angular.module('kenkenApp')
         if (isPossible(n)) {
           var remainder = op == '+' ? total - n : total / n;
           if (remainder > 0 && remainder == Math.round(remainder)) {
-            possibles[row].clear(n); possibles[column].clear(n);
+            pClear(possibles[row], n); pClear(possibles[column], n);
             if (cageCanFinish(op, remainder, otherCells, possibles)) return true;
-            possibles[row].set(n); possibles[column].set(n);
+            pSet(possibles[row], n); pSet(possibles[column], n);
           }
         }
       }
@@ -319,7 +335,7 @@ angular.module('kenkenApp')
       "divisor": function*() {
         yield *yieldCageCells("x", function*(cage, cell) {
           var nondivisors = [];
-          cell.possible.forEach(function (n) {
+          pEach(cell.possible, function(n) {
             if (cage.total % n != 0) nondivisors.push(n);
           });
           if (nondivisors.length > 0) yield *clear(cell, nondivisors, "not a divisor of " + cage.total);
@@ -342,15 +358,15 @@ angular.module('kenkenApp')
           } else if (openCells.length < 4) {
             yield *openCells.yieldEach(function*(cell) {
               var otherCells = arraySubtract(openCells, [cell]);
-              cell.possible.forEach(function(n) {
+              pEach(cell.possible, function(n) {
                 var possibles = rowAndColumnPossibles();
-                possibles[cell.i].clear(n);
-                possibles[cell.j + boardSize].clear(n);
+                pClear(possibles[cell.i], n);
+                pClear(possibles[cell.j + boardSize], n);
                 if (!cageCanFinish('+', remainder - n, otherCells, possibles)) {
                   bufferClear(cell, n, "rest of cage impossible " + cageName(cage));
                 }
-                possibles[cell.i].set(n);
-                possibles[cell.j + boardSize].set(n);
+                pSet(possibles[cell.i], n);
+                pSet(possibles[cell.j + boardSize], n);
               });
               yield *flushClears();
             });
@@ -363,9 +379,9 @@ angular.module('kenkenApp')
         // eliminate values that can't complete a division cage
         yield *yieldCageCells("/", function*(cage, cell, i) {
             var otherCell = cage.cells[1 - i];
-            cell.possible.forEach(function(n) {
+            pEach(cell.possible, function(n) {
               var vals = [n * cage.total, Math.round(10 * n / cage.total) / 10]; // truncate after 1st decimal place
-              if (!otherCell.possible.includesAny(vals)) {
+              if (!pYes(otherCell.possible, vals)) {
                 bufferClear(cell, n, "" + cage.total + "/: " + vals[0] + " & " + vals[1] + " not possible in other cell " + cageName(cage));
               }
             });
@@ -388,19 +404,19 @@ angular.module('kenkenApp')
             yield *solveCell(openCells[0], remainder);
           } else {
             yield *openCells.yieldEach(function*(cell) {
-              cell.possible.forEach(function(n) {
+              pEach(cell.possible, function(n) {
                 if (remainder % n > 0) {
                   bufferClear(cell, n, "not a divisor of " + remainder);
                 } else {
                   var otherCells = arraySubtract(openCells, [cell]);
                   var possibles = rowAndColumnPossibles();
-                  possibles[cell.i].clear(n);
-                  possibles[cell.j + boardSize].clear(n);
+                  pClear(possibles[cell.i], n);
+                  pClear(possibles[cell.j + boardSize], n);
                   if (!cageCanFinish('x', remainder / n, otherCells, possibles)) {
                     bufferClear(cell, n, "rest of cage impossible " + cageName(cage));
                   }
-                  possibles[cell.i].set(n);
-                  possibles[cell.j + boardSize].set(n);
+                  pSet(possibles[cell.i], n);
+                  pSet(possibles[cell.j + boardSize], n);
                 }
               });
               yield *flushClears();
@@ -417,7 +433,7 @@ angular.module('kenkenApp')
           var rowOrCol = line < boardSize ? "row" : "column";
           for (var n = 1; n <= boardSize; n++) {
             var count = 0, target = null;
-            cells.forEach(function(cell) { if (cell.possible.includes(n)) {
+            cells.forEach(function(cell) { if (pYes(cell.possible, n)) {
                 count++;
                 target = cell;
             }});
@@ -432,10 +448,13 @@ angular.module('kenkenApp')
         // Check legal subtraction possibilities
         yield* yieldCageCells('-', function*(cage, cell, i) {
           var otherCell = cage.cells[1 - i];
-          cell.possible.forEach(function (n) {
+          pEach(cell.possible, function (n) {
+            console.log("subtraction: trying", n);
             var vals = [n + cage.total, n - cage.total];
-            if (!otherCell.possible.includesAny(vals)) {
+            if (!pYes(otherCell.possible, vals)) {
               bufferClear(cell, n, "" + cage.total + "-: " + vals[0] + " & " + vals[1] + " not possible in other cell " + cageName(cage));
+            } else {
+              console.log("" + cage.total + "-: " + vals[0] + " or " + vals[1] + " possible in other cell " + cageName(cage));
             }
           });
           yield *flushClears();
@@ -451,13 +470,13 @@ angular.module('kenkenApp')
           var rowOrCol = line < boardSize ? "row" : "column";
           for (var i = 0; i < boardSize - 1; i++) {
             var cellA = cells[i];
-            if (cellA.possible.count() == 2) {
+            if (pCount(cellA.possible) == 2) {
               for (var j = i + 1; j < boardSize; j++) {
                 var cellB = cells[j];
-                if (cellB.possible.equals(cellA.possible)) {
+                if (cellB.possible.matches(cellA.possible)) {
                   // two-pair found! remove these two values from all other cells
                   var otherCells = arraySubtract(cells, [cellA, cellB]);
-                  var v = cellA.possible.values();
+                  var v = pValues(cellA.possible);
                   var vals = "" + v[0] + "-" + v[1];
                   var inCells = cellName(cellA) + " & " + cellName(cellB);
                   yield *otherCells.yieldEach(function*(cell) {
@@ -489,20 +508,20 @@ angular.module('kenkenApp')
           var rowOrCol = line < boardSize ? "row" : "column";
           for (var i = 0; i < boardSize - 2; i++) {
             var cellA = cells[i];
-            if (cellA.solution || cellA.possible.count() > 3) continue;
+            if (cellA.solution || pCount(cellA.possible) > 3) continue;
             for (var j = i + 1; j < boardSize - 1; j++) {
               var cellB = cells[j];
-              if (cellB.solution || cellB.possible.count() > 3) continue;
-              var possibleAB = cellA.possible.union(cellB.possible);
-              if (possibleAB.count() > 3) continue;
+              if (cellB.solution || pCount(cellB.possible) > 3) continue;
+              var possibleAB = pUnion(cellA.possible, cellB.possible);
+              if (pCount(possibleAB) > 3) continue;
               for (var k = j + 1; k < boardSize; k++) {
                 var cellC = cells[k];
-                if (cellC.solution || cellC.possible.count() > 3) continue;
-                var possibleABC = possibleAB.union(cellC.possible);
-                if (possibleABC.count() == 3) {
+                if (cellC.solution || pCount(cellC.possible) > 3) continue;
+                var possibleABC = pUnion(possibleAB, cellC.possible);
+                if (pCount(possibleABC) == 3) {
                   // threesome found! remove these three values from all other cells
                   var otherCells = arraySubtract(cells, [cellA, cellB, cellC]);
-                  var v = possibleABC.values();
+                  var v = pValues(possibleABC);
                   var vals = "" + v[0] + "-" + v[1] + "-" + v[2];
                   var inCells = cellName(cellA) + "," + cellName(cellB) + "," + cellName(cellC);
                   yield *otherCells.yieldEach(function*(cell) {
@@ -536,7 +555,7 @@ angular.module('kenkenApp')
             for (var n = 1; n <= boardSize; n++) {
               var cellsWithValue = [];
               cells.forEach(function (cell, i) {
-                if (cell.possible.includes(n)) {
+                if (pYes(cell.possible, n)) {
                   if (cellsWithValue.length < 3) cellsWithValue.push(i); // don't collect past 3 occurrences
                 }
               });
@@ -663,7 +682,7 @@ angular.module('kenkenApp')
     function cageName(cage) {
       var name = "[" + cage.total + cage.op + " ";
       cage.cells.forEach(function(cell, i) {
-        name += (i > 0 ? "," : "") + cell.possible.toString();
+        name += (i > 0 ? "," : "") + pString(cell.possible);
       });
       return name + "]";
     }
@@ -707,112 +726,68 @@ angular.module('kenkenApp')
     }
 
     //
-    // MARK: Possibles datatype
+    // MARK: tracking possible values
     //
 
-    // helps keep track of what values are possible in a given cell
-    function Possibles(n) {
-      var a = [];
-      var count = 0;
+    // to track possible values we use an array p of length n, where n is the size of the board
+    // p[i] == true if i is a possible value in the cell, false otherwise
+    // p[0] stores the count of possible values
+    // the following functions maintain this
 
-      this.setAll = function() {
-        for (var i = 1; i <= n; i++) a[i] = true;
-        count = n;
-        return this;
-      };
-
-      this.clearAll = function() {
-        for (var i = 1; i <= n; i++) a[i] = false;
-        count = 0;
-        return this;
-      };
-
-      this.set = function(x) {
-        var self = this;
-        if (x instanceof Array) {
-          x.forEach(function(k) { self.set(k) });
-        } else {
-          if (x > 0 && x <= n && !a[x]) {
-            a[x] = true;
-            count += 1;
-          }
-        }
-        return this;
-      };
-
-      this.clear = function(x) {
-        var self = this;
-        if (x instanceof Array) {
-          x.forEach(function(k) { self.clear(k); });
-        } else if (x > 0 && x <= n && a[x]) {
-          a[x] = false;
-          count -= 1;
-        }
-        return this;
-      };
-
-      this.setOnly = function(x) {
-        this.clearAll();
-        this.set(x);
-        return this;
-      };
-
-      this.includes = function(x) {
-        return x > 0 && x <= n && a[x];
-      };
-
-      this.includesAny = function(x) {
-        for (var i = 0; i < x.length; i++) {
-          if (this.includes(x[i])) return true;
-        }
-        return false;
-      };
-
-      this.count = function() {
-        return count;
-      };
-
-      this.values = function() {
-        var values = [];
-        this.forEach(function(i) { values.push(i); });
-        return values;
-      };
-
-      this.forEach = function(callback) {
-        for (var i = 1; i <= n; i++) if (a[i]) callback.call(this, i);
-      };
-
-      this.yieldEach = function*(callback) {
-        for (var i = 1; i <= n; i++) if (a[i]) yield *callback(i);
-      };
-
-      this.equals = function(b) {
-        if (this.count() != b.count()) return false;
-        for (var i = 1; i <= n; i++) {
-          if (a[i] && !b.includes(i)) return false;
-        }
-        return true;
-      };
-
-      this.copy = function() {
-        var p = new Possibles(n);
-        for (var i = 1; i <= n; i++) if (!a[i]) p.clear(i);
-        return p;
-      };
-
-      this.union = function(b) {
-        var union = new Possibles(n);
-        for (var i = 1; i <= n; i++) {
-          if (!a[i] && !b.includes(i)) union.clear(i);
-        }
-        return union;
-      };
-
-      this.toString = function() {
-        return this.values().join("");
-      };
-
-      return this.setAll();
+    function pNew(n) {
+      var p = [n];
+      for (var i = 1; i <= n; i++) p[i] = true;
+      return p;
     }
+    function pSetAll(p) {
+      for (var i = 1; i < p.length; i++) p[i] = true;
+      p[0] = p.length - 1;
+    }
+    function pClearAll(p) {
+      for (var i = 1; i < p.length; i++) p[i] = false;
+      p[0] = 0;
+    }
+    function pSet(p, x) {
+      if (x instanceof Array) x.forEach(function(k) { pSet(p, k); });
+      else if (x > 0 && x < p.length && !p[x]) { p[x] = true; p[0]++; }
+    }
+    function pClear(p, x) {
+      if (x instanceof Array) x.forEach(function(k) { pClear(p, k); });
+      else if (x > 0 && x < p.length && p[x]) { p[x] = false; p[0]--; }
+    }
+    function pSetOnly(p, x) {
+      pClearAll(p); pSet(p, x);
+    }
+    function pYes(p, x) {
+      if (x instanceof Array) {
+        for (var i = 0; i < x.length; i++) if (pYes(p, x[i])) return true;
+        return false;
+      } else {
+        return (x > 0 && x < p.length && p[x]);
+      }
+    }
+    function pCount(p) {
+      return p[0];
+    }
+    function pEach(p, fn) {
+      for (var i = 1; i < p.length; i++) if (p[i]) fn(i);
+    }
+    function pValues(p) {
+      var values = [];
+      pEach(p, function(i) { values.push(i); });
+      return values;
+    }
+    function pFirstValue(p) {
+      return p.indexOf(true);
+    }
+    function pUnion(a, b) {
+      var p = pNew(Math.max(a.length, b.length) - 1);
+      for (var i = 1; i < a.length; i++) if (!a[i] && !b[i]) pClear(p, i);
+      return p;
+    }
+    function pString(p) {
+      return pValues(p).join("");
+    }
+
 
   });

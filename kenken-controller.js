@@ -6,7 +6,6 @@ angular.module('kenkenApp')
 
     var solveIterator;
 
-    // TODO incorporate solver into kenken puzzle, reset on reset, new on new, etc, save possibles when saving values
     function loadValues() {
       var kenken = $window.localStorage.getItem('kenken');
       //console.log('loadValues %O', kenken);
@@ -21,6 +20,7 @@ angular.module('kenkenApp')
         $scope.time = kenken.time || 0;
         $scope.solved = KenkenService.isSolved($scope.board);
         undos = kenken.undos || [];
+        KenkenSolver.initialize($scope);
         if (!$scope.solved) startTimer();
       } else {
         $scope.newBoard();
@@ -87,6 +87,8 @@ angular.module('kenkenApp')
       });
       $scope.time = 0;
       $scope.solved = false;
+      KenkenSolver.reset();
+      solveIterator = null;
       storeValues();
       console.log('reset! undos %O', undos);
     }
@@ -100,6 +102,8 @@ angular.module('kenkenApp')
       $scope.time = 0;
       $scope.solved = false;
       undos = [];
+      KenkenSolver.initialize($scope);
+      KenkenSolver.reset();
 
       storeValues();
       startTimer();
@@ -108,7 +112,6 @@ angular.module('kenkenApp')
     $scope.solveStep = function() {
       if (!solveIterator) solveIterator = KenkenSolver.solve($scope);
       var step = solveIterator.next();
-      if (step.done) solveIterator = null;
       return step;
     };
 
