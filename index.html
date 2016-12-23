@@ -31,6 +31,13 @@
                 </div>
             </td>
         </tr>
+        <tr>
+            <!-- TODO get colspan from board size -->
+            <td colspan="8" class="solver">
+                <p class="rule">{{ solver.rule() }}</p>
+                <p class="message" ng-bind-html="solver.message() | operators"></p>
+            </td>
+        </tr>
     </table>
     <div class="controls">
     <label>size:</label>

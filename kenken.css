@@ -49,11 +49,14 @@ td {
 .highlight {
     background-color: lightyellow;
 }
+.solver-message {
+    text-align: center;
+}
 
 select {
     margin-top: 10px;
 }
 
-.help p {
+.help p, .solver p {
     margin: 0;
 }
