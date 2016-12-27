@@ -5,6 +5,7 @@ angular.module('kenkenApp')
     // TODO make it easier to start solving again after changes to possibles
     // TODO equate guess with solution
     // TODO if it can't solve, check if unique solution exists
+    // TODO rename inLine to line, check for null instead of < 0
 
 
     this.getSolver = function($scope) {
@@ -29,7 +30,7 @@ angular.module('kenkenApp')
 
       // the rules used by the solver, in order
       var ruleNames = ["singleton", "one possible", "divisor", "must-have divisor", "division", "multiplication", "subtraction",
-        "pigeonhole", "addition", "two pair", "three", "two and two", /* "not both", */ "line sum", "line product",
+        "pigeonhole", "addition", "two pair", "three", "two and two", /* "not both", */ "must have in line", "line sum", "line product",
         "double math", "subtract subcage"];
       var rule;
       var numPasses;
@@ -145,7 +146,7 @@ angular.module('kenkenApp')
           values = values.filter(function(v) { return (pYes(cell.possible, v)); });
           $scope.highlight = cage ? cage.cells : null;
           console.log("%s clear %s: %s", cellName(cell), values.join(","), why);
-          message = "clear " + values.join(" ") + "<br>" + why;
+          message = "clear " + values.join("") + "<br>" + why;
           $scope.setCursor(cell.i, cell.j);
           $scope.cursorHidden = false;
           yield null;
@@ -283,6 +284,21 @@ angular.module('kenkenApp')
         else return -1;
       }
 
+      function cellLines(cells) {
+        var lines = [];
+        cells.forEach(function(cell) {
+          lines[cell.i] = true;
+          lines[cell.j + boardSize] = true;
+        });
+        var result = [];
+        lines.forEach(function(line, i) { if (line) result.push(i); });
+        return result;
+      }
+
+      function cellInLine(cell, line) {
+        return (line < boardSize ? cell.i == line : cell.j == line - boardSize);
+      }
+
       function rowAndColumnPossibles() {
         var possibles = [];
         for (var i = 0; i < boardSize * 2; i++) {
@@ -320,6 +336,7 @@ angular.module('kenkenApp')
         return false;
 
       }
+
 
       //
       // MARK: convenient yield loops
@@ -639,17 +656,43 @@ angular.module('kenkenApp')
         "must-have divisor": function*() {
           var n = boardSize;
           var mustHaveDivisors = n < 6 ? [3, 5] : n > 6 ? [5, 7] : [5];
-          yield *yieldCageCells('x', function*(cage) {
+          yield *yieldCageCells('x', function*(cage) { if (cage.inLine > 0) {
             yield *mustHaveDivisors.yieldEach(function*(d) {
-              if (cage.total % d == 0 && cage.inLine > 0) {
-                var rowOrCol = cage.inLine < boardSize ? "row" : "column";
+              if (cage.total % d == 0) {
                 var why = math(cage) + " cage needs the " + d;
                 yield *rowsAndColumns[cage.inLine].yieldEach(function*(cell) {
                   if (cage.cells.indexOf(cell) < 0) yield *clear(cell, d, why, cage);
                 });
               }
             });
-          });
+          }});
+        },
+
+        "must have in line": function*() {
+          // TODO restrict this properly: include other ops, but only cages with max 3 possible in all cells?
+          var lineValues = pNew(boardSize);
+          yield *yieldCages('x', function*(cage) { if (cage.cells.length < 4) {
+            var allValues = rowAndColumnPossibles();
+            var lines = cellLines(cage.cells);
+            eachSolution(cage, function(solution) {
+              lines.forEach(function(line) {
+                pClearAll(lineValues);
+                cage.cells.forEach(function(cell, i) {
+                  if (cellInLine(cell, line)) { pSet(lineValues, solution[i]); }
+                });
+                allValues[line] = pIntersect(allValues[line], lineValues);
+              })
+            });
+            yield *lines.yieldEach(function*(line) {
+              if (pCount(allValues[line]) > 0) {
+                var rowOrCol = line < boardSize ? "row" : "column";
+                var why = math(cage) + " cage needs the " + pString(allValues[line]) + " in this " + rowOrCol;
+                yield *rowsAndColumns[line].yieldEach(function*(cell) {
+                  if (cage.cells.indexOf(cell) < 0) yield *clear(cell, pValues(allValues[line]), why, cage);
+                });
+              }
+            });
+          }});
         },
 
         "line sum": function*() {
@@ -849,9 +892,10 @@ angular.module('kenkenApp')
     // p[0] stores the count of possible values
     // the following functions maintain this
 
-    function pNew(n) {
+    function pNew(n, fill) {
+      if (fill === undefined) fill = true;
       var p = [n];
-      for (var i = 1; i <= n; i++) p[i] = true;
+      for (var i = 1; i <= n; i++) p[i] = fill;
       return p;
     }
     function pSetAll(p) {
@@ -897,7 +941,12 @@ angular.module('kenkenApp')
     }
     function pUnion(a, b) {
       var p = pNew(Math.max(a.length, b.length) - 1);
-      for (var i = 1; i < a.length; i++) if (!a[i] && !b[i]) pClear(p, i);
+      for (var i = 1; i < p.length; i++) if (!a[i] && !b[i]) pClear(p, i);
+      return p;
+    }
+    function pIntersect(a, b) {
+      var p = pNew(Math.min(a.length, b.length) - 1);
+      for (var i = 1; i < p.length; i++) if (!a[i] || !b[i]) pClear(p, i);
       return p;
     }
     function pInvert(p) {
