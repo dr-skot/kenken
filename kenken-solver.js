@@ -5,6 +5,7 @@ angular.module('kenkenApp')
     // TODO make it easier to start solving again after changes to possibles
     // TODO equate guess with solution
     // TODO detect 1 possible and solveCell
+    // TODO if it can't solve, check if unique solution exists
 
 
     this.getSolver = function($scope) {
@@ -29,7 +30,7 @@ angular.module('kenkenApp')
 
       // the rules used by the solver, in order
       var ruleNames = ["singleton", "divisor", "must-have divisor", "division", "multiplication", "subtraction",
-        "pigeonhole", "addition", "two pair", "three", "two and two", "not both", "line sum", "line product",
+        "pigeonhole", "addition", "two pair", "three", "two and two", /* "not both", */ "line sum", "line product",
         "double math", "subtract subcage"];
       var rule;
       var numPasses;
@@ -142,6 +143,7 @@ angular.module('kenkenApp')
       function *clear(cell, values, why, cage) {
         if (!(values instanceof Array)) values = [values];
         if (pYes(cell.possible, values)) {
+          values = values.filter(function(v) { return (pYes(cell.possible, v)); });
           $scope.highlight = cage ? cage.cells : null;
           console.log("%s clear %s: %s", cellName(cell), values.join(","), why);
           message = "clear " + values.join(" ") + "<br>" + why;
