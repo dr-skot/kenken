@@ -4,7 +4,6 @@ angular.module('kenkenApp')
     // TODO when cage must contain value (eg [2/ 248, 248] must contain 4) and is inline, eliminate value from rest of line
     // TODO make it easier to start solving again after changes to possibles
     // TODO equate guess with solution
-    // TODO detect 1 possible and solveCell
     // TODO if it can't solve, check if unique solution exists
 
 
@@ -29,7 +28,7 @@ angular.module('kenkenApp')
       initializeCages();
 
       // the rules used by the solver, in order
-      var ruleNames = ["singleton", "divisor", "must-have divisor", "division", "multiplication", "subtraction",
+      var ruleNames = ["singleton", "one possible", "divisor", "must-have divisor", "division", "multiplication", "subtraction",
         "pigeonhole", "addition", "two pair", "three", "two and two", /* "not both", */ "line sum", "line product",
         "double math", "subtract subcage"];
       var rule;
@@ -358,6 +357,14 @@ angular.module('kenkenApp')
               yield *setOnly(cage.cells[0], cage.total, "singleton cage");
             }
           });
+        },
+
+        "one possible": function*() {
+          yield *rows.yieldEach(function*(cells) { yield *cells.yieldEach(function*(cell) {
+            if (!cell.solution && pCount(cell.possible) == 1) {
+              yield *solveCell(cell, pFirstValue(cell.possible), "only possible value");
+            }
+          })});
         },
 
         "divisor": function*() {
@@ -735,6 +742,7 @@ angular.module('kenkenApp')
           }});
         },
 
+        // TODO something's wrong with this
         "not both": function*() {
           // if a cell has only two possible values, no inline cage in its row or column can use both of those values
           yield *rows.yieldEach(function*(cells) { yield *cells.yieldEach(function*(cell) {
