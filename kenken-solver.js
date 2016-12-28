@@ -677,7 +677,7 @@ angular.module('kenkenApp')
         // TODO make this work when cage.op != 'x'
         "must have in line": function*() {
           var lineValues = pNew(boardSize);
-          yield *yieldCages('x', function*(cage) { if (cage.cells.length < 4) {
+          yield *yieldCages(null, function*(cage) { if (cage.cells.length < 4) {
             var allValues = rowAndColumnPossibles();
             var lines = cellLines(cage.cells);
             eachSolution(cage, function(solution) {
@@ -806,11 +806,8 @@ angular.module('kenkenApp')
                     var validSolutions = [];
                     eachSolution(cage, function (solution) {
                       if (solution.indexOf(vals[0]) < 0 || solution.indexOf(vals[1]) < 0) {
-                        console.log("checking for " + vals.join("") + ": solution valid " + solution.join(""));
                         // solution doesn't use both values! it's valid
                         validSolutions.push(solution);
-                      } else {
-                        console.log("checking for " + vals.join("") + ": solution invalid " + solution.join(""));
                       }
                     });
                     var possible = pNew(boardSize);
@@ -846,14 +843,11 @@ angular.module('kenkenApp')
       f(cage.total, cage.cells, fn, []);
 
       function f(total, cells, fn, acc) {
-        console.log("eachSolution f", acc.join(""), ",", cells.length, "cells left");
         if (cells.length == 1) {
-          console.log("try", total, pYes(cells[0].possible, total) ? "YES" : "NO");
           if (pYes(cells[0].possible, total)) fn(acc.concat([total]));
         } else {
           var restOfCells = cells.slice(1);
           pEach(cells[0].possible, function(n) {
-            console.log("is", n, "legal?", opLegal(cage.op, total, n, boardSize) ? "YES" : "NO");
             if (opLegal(cage.op, total, n, boardSize)) {
               var newTotals = opReduce(cage.op, total, n);
               if (!(newTotals instanceof Array)) newTotals = [newTotals];
