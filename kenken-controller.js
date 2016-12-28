@@ -116,6 +116,7 @@ angular.module('kenkenApp')
 
     $scope.setCursor = function(i, j) {
       $scope.cursor = [i, j];
+      $scope.cursorHidden = false;
       storeValues();
     };
 
