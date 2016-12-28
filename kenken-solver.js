@@ -1,9 +1,8 @@
 angular.module('kenkenApp')
   .service('KenkenSolver', function() {
 
-    // TODO equate guess with solution
-    // TODO go back to coords with cages?
     // TODO next() scheme without yield?
+    // TODO go back to coords with cages?
 
     this.getSolver = function($scope) {
 
@@ -126,7 +125,7 @@ angular.module('kenkenApp')
 
         rowsAndColumns.forEach(function(cells) {
           addCage({op: "+", total: rowTotal, cells: cells, collisionChecked: true});
-          addCage({op: "*", total: rowProduct, cells: cells, collisionChecked: true});
+          addCage({op: "x", total: rowProduct, cells: cells, collisionChecked: true});
         });
       }
 
@@ -135,7 +134,6 @@ angular.module('kenkenApp')
         rows.forEach(function (cells) {
           cells.forEach(function (cell) {
             cell.possible = pNew(boardSize);
-            delete cell.solution;
             delete cell.guess;
           })
         });
@@ -182,7 +180,7 @@ angular.module('kenkenApp')
 
       // set a single value as the only possibility in a cell
       function *setOnly(cell, n, why, cage) {
-        if (cell.solution != n) {
+        if (cell.guess != n) {
           $scope.highlight = cage ? cage.cells : null;
           console.log("%s set! %d: %s", cellName(cell), n, why);
           message = "set " + n + "<br>" + why;
@@ -200,13 +198,12 @@ angular.module('kenkenApp')
         if (cell.ans != n) console.log("!!!!! WRONG");
         console.log("SOLVED " + cellName(cell) + " = " + n);
         message = "cell solved: " + n + "<br>clearing " + n + " from row and column";
-        cell.solution = n;
-        $scope.setCursor(cell.i, cell.j);
         $scope.guess(cell.i, cell.j, n);
+        $scope.setCursor(cell.i, cell.j);
 
         var linesToClear = rows[cell.i].concat(columns[cell.j]);
         linesToClear.forEach(function(otherCell) {
-          if (!otherCell.solution) pClear(otherCell.possible, n);
+          if (!otherCell.guess) pClear(otherCell.possible, n);
         });
 
         $scope.highlight = linesToClear;
@@ -214,7 +211,7 @@ angular.module('kenkenApp')
 
         // clear row & column
         yield *linesToClear.yieldEach(function*(otherCell) {
-          if (!otherCell.solution && pCount(otherCell.possible) == 1) {
+          if (!otherCell.guess && pCount(otherCell.possible) == 1) {
               yield *solveCell(otherCell, pFirstValue(otherCell.possible));
           }
         });
@@ -244,8 +241,8 @@ angular.module('kenkenApp')
         var reducible = "+x".includes(cage.op);
         var total = cage.total;
         var unsolvedCells = cage.cells.filter(function (c) {
-          if (c.solution && reducible) total = opReduce(cage.op, total, c.solution);
-          return !c.solution;
+          if (c.guess && reducible) total = opReduce(cage.op, total, c.guess);
+          return !c.guess;
         });
         var result = { cells: unsolvedCells };
         if (reducible && unsolvedCells.length > 1) result.op = cage.op;
@@ -381,7 +378,7 @@ angular.module('kenkenApp')
       function *yieldCageCells(op, fn) {
         yield *yieldCages(op, function*(cage) {
           yield *cage.cells.yieldEach(function*(cell, i) {
-            if (!cell.solution) {
+            if (!cell.guess) {
               yield *fn(cage, cell, i);
             }
           });
@@ -406,7 +403,7 @@ angular.module('kenkenApp')
           // if a cell has one possible value, that is its solution
           // if a cell has no possible values, the puzzle is broken
           yield *rows.yieldEach(function*(cells) { yield *cells.yieldEach(function*(cell) {
-            if (!cell.solution && pCount(cell.possible) == 1) {
+            if (!cell.guess && pCount(cell.possible) == 1) {
               yield *solveCell(cell, pFirstValue(cell.possible), "only possible value");
             } else if (pCount(cell.possible) == 0) {
               broken = cell;
@@ -431,7 +428,7 @@ angular.module('kenkenApp')
             var openCells = [];
 
             cage.cells.forEach(function (cell) {
-              if (cell.solution) remainder -= cell.solution;
+              if (cell.guess) remainder -= cell.guess;
               else openCells.push(cell);
             });
 
@@ -479,7 +476,7 @@ angular.module('kenkenApp')
             var openCells = [];
 
             cage.cells.forEach(function (cell) {
-              if (cell.solution) remainder /= cell.solution;
+              if (cell.guess) remainder /= cell.guess;
               else openCells.push(cell);
             });
 
@@ -520,7 +517,7 @@ angular.module('kenkenApp')
                   target = cell;
                 }
               });
-              if (count == 1 && !target.solution) {
+              if (count == 1 && !target.guess) {
                 yield *setOnly(target, n, "only place left in " + rowOrCol + " for " + n, {cells: cells});
               }
             }
@@ -587,15 +584,15 @@ angular.module('kenkenApp')
             var rowOrCol = line < boardSize ? "row" : "column";
             for (var i = 0; i < boardSize - 2; i++) {
               var cellA = cells[i];
-              if (cellA.solution || pCount(cellA.possible) > 3) continue;
+              if (cellA.guess || pCount(cellA.possible) > 3) continue;
               for (var j = i + 1; j < boardSize - 1; j++) {
                 var cellB = cells[j];
-                if (cellB.solution || pCount(cellB.possible) > 3) continue;
+                if (cellB.guess || pCount(cellB.possible) > 3) continue;
                 var possibleAB = pUnion(cellA.possible, cellB.possible);
                 if (pCount(possibleAB) > 3) continue;
                 for (var k = j + 1; k < boardSize; k++) {
                   var cellC = cells[k];
-                  if (cellC.solution || pCount(cellC.possible) > 3) continue;
+                  if (cellC.guess || pCount(cellC.possible) > 3) continue;
                   var possibleABC = pUnion(possibleAB, cellC.possible);
                   if (pCount(possibleABC) == 3) {
                     // threesome found! remove these three values from all other cells
@@ -698,14 +695,14 @@ angular.module('kenkenApp')
           }});
         },
 
-        // TODO make this work when cage.op != 'x'
         "must have in line": function*() {
           var lineValues = pNew(boardSize);
+          // check all cages of less than 4 cells
           yield *yieldCages(null, function*(cage) { if (cage.cells.length < 4) {
-            var allValues = rowAndColumnPossibles();
-            var lines = cellLines(cage.cells);
-            eachSolution(cage, function(solution) {
-              lines.forEach(function(line) {
+            var allValues = rowAndColumnPossibles(); // values possible in each line
+            var lines = cellLines(cage.cells);       // lines covered by this cage
+            eachSolution(cage, function(solution) {  // check each cage solution
+              lines.forEach(function(line) {         // for each line in the solution
                 pClearAll(lineValues);
                 cage.cells.forEach(function(cell, i) {
                   if (cellInLine(cell, line)) { pSet(lineValues, solution[i]); }
@@ -718,6 +715,7 @@ angular.module('kenkenApp')
                 var rowOrCol = line < boardSize ? "row" : "column";
                 var why = math(cage) + " cage needs the " + pString(allValues[line]) + " in this " + rowOrCol;
                 yield *rowsAndColumns[line].yieldEach(function*(cell) {
+
                   if (cage.cells.indexOf(cell) < 0) yield *clear(cell, pValues(allValues[line]), why, cage);
                 });
               }
@@ -736,8 +734,8 @@ angular.module('kenkenApp')
                 remainder -= cage.total;
                 cells = arraySubtract(cells, cage.cells);
                 i -= 1; // adjust after cells are dropped
-              } else if (cell.solution) {
-                remainder -= cell.solution;
+              } else if (cell.guess) {
+                remainder -= cell.guess;
                 cells = arraySubtract(cells, [cell]);
                 i -= 1;
               }
@@ -761,8 +759,8 @@ angular.module('kenkenApp')
                 remainder /= cage.total;
                 cells = arraySubtract(cells, cage.cells);
                 i -= 1; // adjust after cells are dropped
-              } else if (cell.solution) {
-                remainder /= cell.solution;
+              } else if (cell.guess) {
+                remainder /= cell.guess;
                 cells = arraySubtract(cells, [cell]);
                 i -= 1;
               }
@@ -788,7 +786,7 @@ angular.module('kenkenApp')
               // restrict all cells to those values
               var why = "only " + pValues(valid).join(" ") + " satisfy both " + math(cage) + " and " + math(otherCage);
               var invalidValues = pValues(pInvert(valid));
-              yield *cage.cells.yieldEach(function*(cell) { if (!cell.solution) {
+              yield *cage.cells.yieldEach(function*(cell) { if (!cell.guess) {
                 yield *clear(cell, invalidValues, why, cage);
               }})
             }});
@@ -815,8 +813,7 @@ angular.module('kenkenApp')
           }});
         },
 
-        // TODO something's wrong with this
-        // (may be underlying problem w eachSolution: see must have in line with
+        // TODO fix messaging; some values are cleared because no solution contains them, not due to 'not both' rule
         "not both": function*() {
           // if a cell has only two possible values, no inline cage in its row or column can use both of those values
           yield *rows.yieldEach(function*(cells) { yield *cells.yieldEach(function*(cell) {
@@ -829,9 +826,13 @@ angular.module('kenkenApp')
                   if (cage.cells.indexOf(cell) == -1) {
                     var validSolutions = [];
                     eachSolution(cage, function (solution) {
+                      console.log("solution uses both", vals.join(""), "?");
                       if (solution.indexOf(vals[0]) < 0 || solution.indexOf(vals[1]) < 0) {
                         // solution doesn't use both values! it's valid
+                        console.log("NO! valid solution");
                         validSolutions.push(solution);
+                      } else {
+                        console.log("YES! invalid solution");
                       }
                     });
                     var possible = pNew(boardSize);
@@ -934,7 +935,7 @@ angular.module('kenkenApp')
     function setSolution(board, cage, solution) {
       cage.cells.forEach(function(coords, c) {
         var i = coords[0], j = coords[1], cell = board[i][j], n = solution[c];
-        if (!cell.solution) {
+        if (!cell.guess) {
           pSetOnly(cell.possible, n);
           for (var ii = 0; ii < board.length; ii++) if (ii != i) pClear(board[ii][j].possible, n);
           for (var jj = 0; jj < board.length; jj++) if (jj != j) pClear(board[i][jj].possible, n);
