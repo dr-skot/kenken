@@ -1,10 +1,9 @@
 angular.module('kenkenApp')
   .service('KenkenSolver', function() {
 
-    // TODO make it easier to start solving again after changes to possibles
     // TODO equate guess with solution
-
     // TODO go back to coords with cages?
+    // TODO next() scheme without yield?
 
     this.getSolver = function($scope) {
 
@@ -27,7 +26,7 @@ angular.module('kenkenApp')
       initializeCages();
 
       // the rules used by the solver, in order
-      var ruleNames = ["singleton", "one possible", "divisor", "must-have divisor", "division", "multiplication", "subtraction",
+      var ruleNames = ["zero or one", "singleton", "divisor", "must-have divisor", "division", "multiplication", "subtraction",
         "pigeonhole", "addition", "two pair", "three", "two and two", "not both", "must have in line", "line sum", "line product",
         "double math", "subtract subcage"];
       //ruleNames = ["not both"];
@@ -37,6 +36,7 @@ angular.module('kenkenApp')
       // iterator for stepwise solving
       var stepIterator = null;
       var done = false;
+      var broken = null;
 
       var message;
 
@@ -55,21 +55,34 @@ angular.module('kenkenApp')
 
       // the main routine
       function *solve() {
-        if (done) return;
+        if (done || broken) return;
         var maxPasses = 50;
         for (numPasses = 1; numPasses < maxPasses; numPasses++) {
           var previousBoard = angular.copy(board);
-          for (var ruleIndex = 0; ruleIndex < ruleNames.length; ruleIndex++) {
+          for (var ruleIndex = 0; !broken && ruleIndex < ruleNames.length; ruleIndex++) {
             rule = ruleNames[ruleIndex];
-            yield *rules[rule]();
+            var iterator = rules[rule]();
+            for (var step = iterator.next(); !broken && !step.done; step = iterator.next()) {
+              yield null;
+            }
           }
-          message = null;
           $scope.highlight = null;
-          console.log("Finished pass", numPasses, "through rules");
-          if (possiblesMatch(previousBoard)) break;
+          if (!broken) {
+            message = null;
+            console.log("Finished pass", numPasses, "through rules");
+            if (possiblesMatch(previousBoard)) break;
+          }
         }
-        console.log("DONE!!!");
-        done = true;
+        if (broken) {
+          console.log("BROKEN!!!");
+          console.log("no values possible in cell");
+          message = "BROKEN!<br>no values possible in cell";
+          $scope.setCursor(broken.i, broken.j);
+        } else {
+          console.log("DONE!!!");
+          done = true;
+          message = "DONE!";
+        }
         rule = null;
         /* TODO make a judgment whether it's worth it to look for solutions (limit # of unsolved cells for example)
         if (!$scope.solved) {
@@ -78,6 +91,10 @@ angular.module('kenkenApp')
         }
         */
         yield null;
+        message = null;
+        done = false;
+        broken = null;
+        stepIterator = null;
       }
 
       function step() {
@@ -155,7 +172,9 @@ angular.module('kenkenApp')
           $scope.cursorHidden = false;
           yield null;
           pClear(cell.possible, values);
-          if (pCount(cell.possible) == 1) {
+          if (pCount(cell.possible) == 0) {
+            broken = cell;
+          } else if (pCount(cell.possible) == 1) {
             yield *solveCell(cell, pFirstValue(cell.possible));
           }
         }
@@ -375,6 +394,7 @@ angular.module('kenkenApp')
 
       var rules = {
         "singleton": function*() {
+          // if a cage has one cell, cell value is the cage total
           yield *yieldCages(null, function*(cage) {
             if (cage.cells.length == 1) {
               yield *setOnly(cage.cells[0], cage.total, "singleton cage");
@@ -382,10 +402,14 @@ angular.module('kenkenApp')
           });
         },
 
-        "one possible": function*() {
+        "zero or one": function*() {
+          // if a cell has one possible value, that is its solution
+          // if a cell has no possible values, the puzzle is broken
           yield *rows.yieldEach(function*(cells) { yield *cells.yieldEach(function*(cell) {
             if (!cell.solution && pCount(cell.possible) == 1) {
               yield *solveCell(cell, pFirstValue(cell.possible), "only possible value");
+            } else if (pCount(cell.possible) == 0) {
+              broken = cell;
             }
           })});
         },
