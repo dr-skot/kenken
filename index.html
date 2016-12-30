@@ -20,7 +20,7 @@
         <tr ng-repeat="row in board">
             <td ng-repeat="cell in row"
                 kenken-cell-walls
-                ng-class="{highlight: isHighlighted(cell), cursor: cursorAt($parent.$index, $index), good: solved || checksRight(cell), bad: checksWrong(cell)}"
+                ng-class="{cursor: cursorAt(cell.i, cell.j), cursorShadow: isCursorShadow(cell), lit: isLit(cell), softLit: isSoftLit(cell), good: solved || checksRight(cell), bad: checksWrong(cell)}"
                 ng-click="setCursor($parent.$index, $index)">
                 {{ cell.guess }}
                 <div class="label" ng-show="cell.isFirstInCage">

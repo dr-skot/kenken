@@ -25,8 +25,17 @@ td {
     font-size: 10px;
     color: gray;
 }
+.cursorShadow {
+    background-color: lightyellow;
+}
 .cursor {
     background-color: yellow;
+}
+.softLit {
+    background-color: lightcyan;
+}
+.lit {
+    background-color: cyan;
 }
 .good {
     background-color: lightgreen;
@@ -45,9 +54,6 @@ td {
 }
 .wall-right {
     border-right: 3px solid black;
-}
-.highlight {
-    background-color: lightyellow;
 }
 .solver-message {
     text-align: center;

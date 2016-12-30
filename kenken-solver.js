@@ -24,9 +24,10 @@ angular.module('kenkenApp')
       initializeCages();
 
       // the rules used by the solver, in order
-      var ruleNames = ["one or none", "singleton", "must-have divisor", "division", "multiplication", "subtraction",
-        "pigeonhole", "addition", "two pair", "three", "two and two", "not both", "must have in line", "line sum", "line product",
+      var ruleNames = ["one or none", "singleton", "multiplication", "addition", "subtraction", "division",
+        "must-have divisor", "pigeonhole", "two pair", "three", "two and two", "not both", "must have in line", "line sum", "line product",
         "double math", "subtract subcage"];
+      //ruleNames = ["not both"];
       var rule;
       var numPasses;
 
@@ -36,6 +37,8 @@ angular.module('kenkenApp')
       var broken = null;
 
       var message;
+
+      var logging = false;
 
       // the object that will be returned
       var solver = {
@@ -59,7 +62,7 @@ angular.module('kenkenApp')
       function *solve() {
         if (done || broken) return;
         var maxPasses = 50;
-        for (numPasses = 1; numPasses < maxPasses; numPasses++) {
+        for (numPasses = 1; !done &&  numPasses < maxPasses; numPasses++) {
           var previousBoard = angular.copy(board);
           for (var ruleIndex = 0; !done && ruleIndex < ruleNames.length; ruleIndex++) {
             rule = ruleNames[ruleIndex];
@@ -77,6 +80,7 @@ angular.module('kenkenApp')
           console.log(numSolutions + " solutions!");
         }
         */
+        yield null;
         rule = null;
         message = null;
         done = false;
@@ -149,16 +153,15 @@ angular.module('kenkenApp')
       }
 
       // eliminate possible values in a cell
-      function *clear(cell, values, why, cage) {
+      function *clear(cell, values, why, ui) {
         if (!(values instanceof Array)) values = [values];
         if (pYes(cell.possible, values)) {
           values = values.filter(function(v) { return (pYes(cell.possible, v)); });
           setUI({
             cell: cell,
-            highlight: cage ? cage.cells : null,
             action: "clear " + values.join(", "),
             why: why
-          });
+          }.extend(ui));
           yield null;
           pClear(cell.possible, values);
           yield *checkOneOrNone(cell);
@@ -166,24 +169,23 @@ angular.module('kenkenApp')
       }
 
       // set a single value as the only possibility in a cell
-      function *setOnly(cell, n, why, cage) {
+      function *setOnly(cell, n, why, ui) {
         if (cell.guess != n) {
           setUI({
             cell: cell,
-            highlight: cage ? cage.cells : null,
             action: "set " + n,
             why: why
-          });
+          }.extend(ui));
           yield null;
           pSetOnly(cell.possible, n);
-          yield *solveCell(cell, n);
+          yield *solveCell(cell);
         }
       }
 
       // set a cell to a particular value, and clear that value from other cells in its row and column
       // if the cell lives in a cage of 3 or more cells, make a smaller cage with the remaining cells
-      function *solveCell(cell, n) {
-        if (n === undefined) n = pFirstValue(cell.possible);
+      function *solveCell(cell) {
+        var n = pFirstValue(cell.possible);
 
         if (cell.ans != n) console.log("!!!!! WRONG"); // TODO better UI for this
 
@@ -198,8 +200,8 @@ angular.module('kenkenApp')
         setUI({
           cell: cell,
           highlight: rowAndColumn,
-          action: "cell solved: " + n,
-          why: "clearing " + n + " from row and column"
+          action: "CELL SOLVED",
+          why: "clear " + n + " from row and column"
         });
 
         yield null;
@@ -218,29 +220,20 @@ angular.module('kenkenApp')
         if (!cell.guess) {
           switch (pCount(cell.possible)) {
             case 0: yield *beBroken(cell); break;
-            case 1: yield *solveCell(cell, undefined, "only possible value"); break;
+            case 1: yield *solveCell(cell); break;
           }
         }
       }
 
       // remove all values in the cage that make the cage math impossible to satisfy
       function *removeCageKillers(cage) {
-        var reduced = reduceCage(cage); // only consider unsolved cells
-
-        switch (reduced.cells.length) {
-          case 0:
-            solveCage(cage);
-            break;
-          case 1:
-            yield *setOnly(reduced.cells, reduced.total, "last cell in " + math(cage) + " cage");
-            break;
-          default:
-            yield *reduced.cells.yieldEach(function*(cell) {
-              var invalid = cageKillers(reduced, cell);
-              if (invalid.length > 0)
-                yield *clear(cell, invalid, "can't make " + math(cage) + " with other cells", cage);
-            });
-        }
+        yield *cage.cells.yieldEach(function*(cell) {
+          if (cage.cells.length > 1) {
+            var invalid = cageKillers(cage, cell);
+            if (invalid.length > 0)
+              yield *clear(cell, invalid, "can't satisfy " + math(cage) + " with other cells", {highlight: cage.cells});
+          }
+        });
       }
 
       // identify values in a given cell that would make the cage math impossible to satisfy
@@ -252,7 +245,9 @@ angular.module('kenkenApp')
 
         pEach(cell.possible, function (n) {
           clearLines(cell, n);
-          if (!opLegal(op, total, n, boardSize) || !canFinish(cage.op, opReduce(op, total, n), otherCells)) {
+
+          var subtotal = opReduce(op, total, n);
+          if (!(otherCells.length == 1 ? pYes(otherCells[0].possible, subtotal) : canFinish(op, subtotal, otherCells))) {
             killers.push(n);
           }
           restoreLines(cell, n);
@@ -297,10 +292,12 @@ angular.module('kenkenApp')
       function setUI(args) {
         if (args.cell) $scope.setCursor(args.cell.i, args.cell.j);
         $scope.cursorHidden = args.cell ? false : true;
-        $scope.highlight = args.highlight;
+        $scope.cursorShadow = args.highlight;
+        $scope.lit = args.lit;
+        $scope.softLit = args.softLit;
         message = args.action + "<br>" + args.why;
         var log = (args.cell ? cellName(args.cell) + " " : "") + args.action + ": " + args.why;
-        console.log(log);
+        if (logging) console.log(log);
       }
 
       function *beBroken(cell) {
@@ -317,7 +314,7 @@ angular.module('kenkenApp')
       function *beDone() {
         setUI({
           action: "DONE!",
-          why: "puzzle solved"
+          why: $scope.solved ? "puzzle solved" : "no further solving possible"
         });
         done = true;
         yield null;
@@ -332,6 +329,7 @@ angular.module('kenkenApp')
         console.log("CAGE SOLVED", cageName(cage));
       }
 
+      // TODO use setUI
       // add a cage to the cage list
       function addCage(cage, why) {
         var key = cage.op;
@@ -339,12 +337,11 @@ angular.module('kenkenApp')
           key += ";" + cell.i + "," + cell.j;
         });
         if (cageExists[key]) return false;
-        if (why) {
-          console.log("add cage " + cageName(cage) + ": " + why);
-          message = "add cage " + math(cage) + "<br>" + why;
-          $scope.highlight = cage.cells;
-          $scope.cursorHidden = true;
-        }
+        if (why) setUI({
+          action: "add cage " + math(cage),
+          why: why,
+          highlight: cage.cells
+        });
         if (cage.cells[0].cage == cage.id) {
           // the puzzle's original cages are guaranteed not to overlap
           cage.collisionChecked = true;
@@ -356,18 +353,20 @@ angular.module('kenkenApp')
         return true;
       }
 
-      function *addCageAndYield(cage, why, highlightCage) {
+      function *addCageAndYield(cage, why, ui) {
         if (!"+x".includes(cage.op)) return; // only + and x cages can be added by solver
-        if (!highlightCage) highlightCage = cage;
         var reduced = reduceCage(cage);
-        if (reduced.cells.length == 0) return;  // no unsolved cells? don't add
-        if (reduced.cells.length == 1) {
-          // one cell? solve it, don't add
-          yield *setOnly(reduced.cells[0], reduced.total, why, highlightCage);
-        } else {
-          // same number of cells as possible values? then cage math tells us nothing; don't add
-          if (pCount(allPossible(reduced.cells)) == reduced.cells.length) return;
-          if (addCage(reduced, why)) yield;
+        switch (reduced.cells.length) {
+          case 0: // no unsolved cells? don't add
+            break;
+          case 1: // one cell? solve it, don't add
+            console.log("here!")
+            yield *setOnly(reduced.cells[0], reduced.total, why, {highlight: cage.cells}.extend(ui));
+            break;
+          default:
+            // same number of cells as possible values? then cage math tells us nothing; don't add
+            if (pCount(allPossible(reduced.cells)) == reduced.cells.length) break;
+            if (addCage(reduced, why)) yield null;
         }
       }
 
@@ -379,7 +378,7 @@ angular.module('kenkenApp')
             solveCage(cage);
             break;
           case 1:
-            yield *setOnly(reduced.cells[0], reduced.total, cage, "last cell left in " + math(cage) + " cage");
+            yield *setOnly(reduced.cells[0], reduced.total, "last cell left in " + math(cage) + " cage", cage);
             break;
           default:
             yield *addCageAndYield(reduced, "leftovers after solving cell");
@@ -492,13 +491,15 @@ angular.module('kenkenApp')
         "divisor": function*() {
           yield *yieldCageCells("x", function*(cage, cell) {
             var invalid = pValues(cell.possible, function(n) { return cage.total % n != 0; });
-            if (invalid.length > 0) yield *clear(cell, invalid, "not a divisor of " + cage.total, cage);
+            if (invalid.length > 0) yield *clear(cell, invalid, "not a divisor of " + cage.total, {highlight: cage.cells});
           });
         },
 
         "addition": function*() {
           // eliminate values that make the rest of an addition cage impossible to complete
-          yield *yieldCages("+", removeCageKillers);
+          yield *yieldCages("+", function*(cage) {
+            if (cage.cells.length < 5) yield *removeCageKillers(cage);
+          });
         },
 
         // TODO: refactor to eliminate repetition with subtraction
@@ -512,13 +513,16 @@ angular.module('kenkenApp')
                 values.push(n);
               }
             });
-            if (values.length > 0) yield *clear(cell, values, "can't make " + math(cage) + " with other cell", cage);
+            if (values.length > 0)
+              yield *clear(cell, values, "can't satisfy " + math(cage) + " with other cell", {highlight: cage.cells});
           });
         },
 
         "multiplication": function*() {
           // eliminate values that can't complete a multiplication cage
-          yield *yieldCages("x", removeCageKillers);
+          yield *yieldCages("x", function*(cage) {
+            if (cage.cells.length < 5) yield *removeCageKillers(cage);
+          });
         },
 
         "pigeonhole": function*() {
@@ -551,7 +555,7 @@ angular.module('kenkenApp')
                 values.push(n);
               }
             });
-            if (values.length > 0) yield *clear(cell, values, "can't make " + math(cage) + " with other cell", cage);
+            if (values.length > 0) yield *clear(cell, values, "can't satisy " + math(cage) + " with other cell", {highlight: cage.cells});
           });
         },
 
@@ -571,9 +575,9 @@ angular.module('kenkenApp')
                     // two-pair found! remove these two values from all other cells
                     var otherCells = arraySubtract(cells, [cellA, cellB]);
                     var vals = pValues(cellA.possible);
-                    var why = "" + vals[0] + " " + vals[1] + " pair lives in other cells";
+                    var why = "" + vals.join(", ") + " pair confined to two cells";
                     yield *otherCells.yieldEach(function*(cell) {
-                      yield *clear(cell, vals, why, {cells: [cellA, cellB]});
+                      yield *clear(cell, vals, why, {lit: [cellA, cellB], highlight: otherCells});
                     });
                     // is pair in same cage? cage bigger than 2? then make a subcage with leftover cells
                     if (cellA.cage == cellB.cage && cages[cellA.cage].cells.length > 2) {
@@ -615,9 +619,9 @@ angular.module('kenkenApp')
                     // threesome found! remove these three values from all other cells
                     var otherCells = arraySubtract(cells, [cellA, cellB, cellC]);
                     var vals = pValues(possibleABC);
-                    var why = "" + vals[0] + " " + vals[1] + " " + vals[2] + " triplet lives in other cells";
+                    var why = "" + vals[0] + " " + vals[1] + " " + vals[2] + " triplet confined to three cells";
                     yield *otherCells.yieldEach(function*(cell) {
-                      yield *clear(cell, vals, why, {cells: [cellA, cellB, cellC]});
+                      yield *clear(cell, vals, why, {highlight: otherCells, lit: [cellA, cellB, cellC]});
                     });
                     // is threesome in same cage? cage bigger than 3? then make a subcage with leftover cells
                     if (cellA.cage == cellB.cage && cellA.cage == cellC.cage && cages[cellA.cage].cells.length > 3) {
@@ -662,30 +666,31 @@ angular.module('kenkenApp')
                   }
                 });
                 // if only two cells have this value, it's a pair! save it
-                if (cellsWithValue.length == 2) pairs[n].push({line: line, cells: cellsWithValue});
+                if (cellsWithValue.length == 2) pairs[n].push({line: line, slots: cellsWithValue});
               }
             });
 
-            // any pair of line pairs share the same crossers?
+            // any two line pairs share the same crossers?
             for (n = 1; n <= boardSize; n++) {
               if (pairs[n].length > 1) {
                 // look for a match
                 for (var j = 0; j < pairs[n].length - 1; j++) {
                   for (var k = j + 1; k < pairs[n].length; k++) {
                     var pairA = pairs[n][j], pairB = pairs[n][k];
-                    if (pairA.cells.matches(pairB.cells)) {
+                    if (pairA.slots.matches(pairB.slots)) {
                       // found one!
-                      var i1 = pairA.line, i2 = pairB.line, j1 = pairA.cells[0], j2 = pairA.cells[1];
+                      var i1 = pairA.line, i2 = pairB.line, j1 = pairA.slots[0], j2 = pairA.slots[1];
                       var foursome = linesAreRows ?
                         [board[i1][j1], board[i1][j2], board[i2][j1], board[i2][j2]] :
                         [board[j1][i1], board[j1][i2], board[j2][i1], board[j2][i2]];
-                      var why = "this " + crosserLabel + "'s " + n + " must occur in " +
-                        lineLabel + " " + i1 + " or " + i2;
-                      yield *pairA.cells.yieldEach(function*(pairCell) {
-                        yield *crossers[pairCell].yieldEach(function*(cell) {
+                      var why = "only two spots for " + n + " in both " + lineLabel + "s, clear rest of " + crosserLabel;
+                      var softLit = lines[pairA.line].concat(lines[pairB.line]);
+                      yield *pairA.slots.yieldEach(function*(pairSlot) {
+                        yield *crossers[pairSlot].yieldEach(function*(cell) {
                           var thisLine = linesAreRows ? cell.i : cell.j;
+                          var highlight = linesAreRows ? columns[cell.j] : rows[cell.i];
                           if (thisLine != pairA.line && thisLine != pairB.line) {
-                            yield *clear(cell, n, why, {cells: foursome});
+                            yield *clear(cell, n, why, {lit: foursome, softLit: softLit, highlight: highlight});
                           }
                         });
                       });
@@ -701,11 +706,12 @@ angular.module('kenkenApp')
           var n = boardSize;
           var mustHaveDivisors = n < 6 ? [3, 5] : n > 6 ? [5, 7] : [5];
           yield *yieldCageCells('x', function*(cage) { if (cage.line != null) {
+            var ui = {lit: cage.cells, highlight: rowsAndColumns[cage.line]};
             yield *mustHaveDivisors.yieldEach(function*(d) {
               if (cage.total % d == 0) {
                 var why = math(cage) + " cage needs the " + d;
                 yield *rowsAndColumns[cage.line].yieldEach(function*(cell) {
-                  if (cage.cells.indexOf(cell) < 0) yield *clear(cell, d, why, cage);
+                  if (!cage.cells.contains(cell)) yield *clear(cell, d, why, ui);
                 });
               }
             });
@@ -716,6 +722,8 @@ angular.module('kenkenApp')
           var lineValues = pNew(boardSize);
           // check all cages of less than 4 cells
           yield *yieldCages(null, function*(cage) { if (cage.cells.length < 4) {
+            // first remove the cage killers
+            yield *removeCageKillers(cage);
             var allValues = rowAndColumnPossibles(); // values possible in each line
             var lines = cellLines(cage.cells);       // lines covered by this cage
             eachSolution(cage, function(solution) {  // check each cage solution
@@ -731,10 +739,12 @@ angular.module('kenkenApp')
               if (pCount(allValues[line]) > 0) {
                 var rowOrCol = line < boardSize ? "row" : "column";
                 var why = math(cage) + " cage needs the " + pString(allValues[line]) + " in this " + rowOrCol;
+                var ui = {lit: cage.cells, highlight: rowsAndColumns[line]};
                 yield *rowsAndColumns[line].yieldEach(function*(cell) {
-
-                  if (cage.cells.indexOf(cell) < 0) yield *clear(cell, pValues(allValues[line]), why, cage);
+                  if (!cage.cells.contains(cell)) yield *clear(cell, pValues(allValues[line]), why, ui);
                 });
+                $scope.lit = cage;
+                $scope.cursorShadow = rowsAndColumns[line];
               }
             });
           }});
@@ -804,7 +814,7 @@ angular.module('kenkenApp')
               var why = "only " + pValues(valid).join(" ") + " satisfy both " + math(cage) + " and " + math(otherCage);
               var invalidValues = pValues(pInvert(valid));
               yield *cage.cells.yieldEach(function*(cell) { if (!cell.guess) {
-                yield *clear(cell, invalidValues, why, cage);
+                yield *clear(cell, invalidValues, why, {highlight: cage.cells});
               }})
             }});
             cage.collisionChecked = true;
@@ -840,10 +850,13 @@ angular.module('kenkenApp')
               yield *yieldCages(null, function*(cage) {
                 if (cage.line == cell.i || cage.line == cell.j + boardSize) {
                   var rowOrCol = cell.line < boardSize ? "row" : "column";
-                  if (cage.cells.indexOf(cell) == -1) {
+                  if (!cage.cells.contains(cell)) {
+                    // first kill solutions that just don't work
+                    yield *removeCageKillers(cage);
+                    // then find solutions that use both
                     var validSolutions = [];
                     eachSolution(cage, function (solution) {
-                      if (solution.indexOf(vals[0]) < 0 || solution.indexOf(vals[1]) < 0) {
+                      if (!solution.contains(vals[0]) || !solution.contains(vals[1])) {
                         // solution doesn't use both values! it's valid
                         validSolutions.push(solution);
                       }
@@ -854,9 +867,9 @@ angular.module('kenkenApp')
                       validSolutions.forEach(function (solution) {
                         pSet(possible, solution[i]);
                       });
-                      var why = cellName(cell) + " must be " + vals[0] + " or " + vals[1] +
-                        ", so cage can't use both in same " + rowOrCol;
-                      yield *clear(cageCell, pValues(pInvert(possible)), why);
+                      var why = "other cell needs " + vals.join(" or ") + ", cage can't use both";
+                      var ui = {highlight: cage.cells, lit: [cell]};
+                      yield *clear(cageCell, pValues(pInvert(possible)), why, ui);
                     });
                   }
                 }
@@ -1144,6 +1157,15 @@ angular.module('kenkenApp')
       return true;
     }
 
+    function intersection(a, b) {
+      var result = [];
+      for (var i = 0; i < a.length; i++) {
+        var item = a[i];
+        if (!result.contains(item) && b.contains(item)) result.push(item);
+      }
+      return result;
+    }
+
     Array.prototype.yieldEach = function*(fn) {
       for (var i = 0; i < this.length; i++) yield* fn(this[i], i);
     };
@@ -1156,5 +1178,17 @@ angular.module('kenkenApp')
       return true;
     };
 
+    if (!Array.prototype.contains) {
+      Array.prototype.contains = function(item) {
+        return this.indexOf(item) != -1;
+      }
+    }
+
+    Object.prototype.extend = function(b) {
+      var result = {}, key = null;
+      for (key in this) if (this.hasOwnProperty(key)) result[key] = this[key];
+      if (b) for (key in b) if (b.hasOwnProperty(key)) result[key] = b[key];
+      return result;
+    }
 
   });

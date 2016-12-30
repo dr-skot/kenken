@@ -132,8 +132,16 @@ angular.module('kenkenApp')
       return KenkenService.cellWalls($scope.board, i, j);
     };
 
-    $scope.isHighlighted = function(cell) {
-      return $scope.highlight && $scope.highlight.indexOf(cell) > -1 && !$scope.cursorAt(cell.i, cell.j);
+    $scope.isCursorShadow = function(cell) {
+      return $scope.cursorShadow && $scope.cursorShadow.indexOf(cell) > -1;
+    };
+
+    $scope.isLit = function(cell) {
+      return $scope.lit && $scope.lit.indexOf(cell) > -1;
+    };
+
+    $scope.isSoftLit = function(cell) {
+      return $scope.softLit && $scope.softLit.indexOf(cell) > -1;
     };
 
     $scope.keydown = function($event) {
