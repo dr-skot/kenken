@@ -34,7 +34,7 @@
         <tr ng-show="solver.message()">
             <!-- TODO get colspan from board size -->
             <td colspan="8" class="solver">
-                <p class="rule">{{ solver.rule() }}</p>
+                <p class="label">{{ solver.pass() }}</p>
                 <p class="message" ng-bind-html="solver.message() | operators"></p>
             </td>
         </tr>

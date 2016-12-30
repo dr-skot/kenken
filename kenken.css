@@ -52,6 +52,17 @@ td {
 .solver-message {
     text-align: center;
 }
+.solver .label {
+    top: 0;
+    text-align: left
+}
+.solver .message {
+    font-size: 20px;
+}
+.solver .possibles {
+    colr: gray;
+    font-size: 18px;
+}
 
 select {
     margin-top: 10px;
